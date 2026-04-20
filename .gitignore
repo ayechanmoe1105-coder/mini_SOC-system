@@ -1,0 +1,8 @@
+.env
+*.db
+__pycache__/
+*.pyc
+.venv/
+venv/
+_gantt_extracted_from_docx.*
+report_gantt_chart.png

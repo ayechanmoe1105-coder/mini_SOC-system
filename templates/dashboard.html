@@ -1,0 +1,2523 @@
+<!DOCTYPE html>
+<!-- Full SOC dashboard from working_app.py. If you only see plain text "SIMPLE TEST",
+     you are not running working_app — stop other Python apps and open the URL printed in the console. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Security Monitoring Dashboard v4-XAI</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --bg-card: rgba(255,255,255,0.95);
+            --text-primary: #1a202c;
+            --text-secondary: #718096;
+            --border-color: #e2e8f0;
+        }
+        
+        [data-theme="dark"] {
+            --bg-primary: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+            --bg-card: rgba(45,55,72,0.95);
+            --text-primary: #f7fafc;
+            --text-secondary: #a0aec0;
+            --border-color: #4a5568;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg-primary); min-height: 100vh; color: var(--text-primary); transition: all 0.3s ease; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .header { background: var(--bg-card); backdrop-filter: blur(10px); border-radius: 16px; padding: 24px 32px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .header-left h1 { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+        .header-left p { color: var(--text-secondary); font-size: 14px; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .theme-toggle { background: var(--bg-card); border: 2px solid var(--border-color); color: var(--text-primary); padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 16px; transition: all 0.3s ease; }
+        .theme-toggle:hover { transform: scale(1.05); }
+        @keyframes livepulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.3)} }
+
+        /* ── Advanced Features ───────────────────────────────── */
+        .health-card {
+            background: var(--bg-card); border-radius: 14px;
+            padding: 18px 16px; text-align: center;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+            border: 1px solid var(--border-color);
+        }
+        .health-card .h-icon { font-size: 28px; margin-bottom: 8px; }
+        .health-card .h-value { font-size: 26px; font-weight: 700; color: var(--text-primary); }
+        .health-card .h-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .health-bar { height: 6px; border-radius: 3px; margin-top: 8px; background: var(--border-color); overflow: hidden; }
+        .health-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+        .health-ok   .health-bar-fill { background: linear-gradient(90deg,#48bb78,#38a169); }
+        .health-warn .health-bar-fill { background: linear-gradient(90deg,#ed8936,#dd6b20); }
+        .health-crit .health-bar-fill { background: linear-gradient(90deg,#f56565,#e53e3e); }
+
+        .mitre-card {
+            padding: 14px 16px; border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            position: relative; overflow: hidden;
+        }
+        .mitre-card::before {
+            content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+        }
+        .mitre-card.severity-critical::before { background: #e53e3e; }
+        .mitre-card.severity-high::before     { background: #ed8936; }
+        .mitre-card.severity-medium::before   { background: #ecc94b; }
+        .mitre-card.severity-low::before      { background: #48bb78; }
+        .mitre-card.severity-none::before     { background: #a0aec0; }
+        .mitre-id   { font-size: 11px; font-weight: 700; color: #667eea; letter-spacing: 0.5px; }
+        .mitre-name { font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 3px 0; }
+        .mitre-tactic { font-size: 11px; color: var(--text-secondary); }
+        .mitre-count { font-size: 22px; font-weight: 800; color: var(--text-primary); }
+        .mitre-count.zero { color: var(--text-secondary); opacity: 0.4; }
+
+        .block-item { display: flex; align-items: center; justify-content: space-between;
+                      padding: 10px 14px; border-radius: 10px; margin-bottom: 8px;
+                      background: rgba(229,62,62,0.07); border: 1px solid rgba(229,62,62,0.2); }
+        .block-item .block-ip { font-weight: 700; font-size: 14px; color: #e53e3e; font-family: monospace; }
+        .block-item .block-reason { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        .unblock-btn { background: none; border: 1px solid var(--border-color); color: var(--text-secondary);
+                       padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        .unblock-btn:hover { border-color: #e53e3e; color: #e53e3e; }
+
+        .honeypot-item { padding: 10px 14px; border-radius: 10px; margin-bottom: 8px;
+                         background: rgba(237,137,54,0.08); border: 1px solid rgba(237,137,54,0.25); }
+        .honeypot-item .hp-path { font-weight: 700; font-size: 13px; color: #ed8936; font-family: monospace; }
+        .honeypot-item .hp-ip   { font-size: 12px; color: var(--text-secondary); }
+        .honeypot-item .hp-time { font-size: 11px; color: var(--text-secondary); float: right; }
+        /* ── Explainable AI Modal ────────────────────────────── */
+        /* ── ML Model Panel ─────────────────────────────── */
+        .ml-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px; margin-bottom: 20px;
+        }
+        .ml-metric-card {
+            background: var(--bg-secondary); border-radius: 12px;
+            padding: 14px 16px; text-align: center;
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s;
+        }
+        .ml-metric-card:hover { transform: translateY(-2px); }
+        .ml-metric-value {
+            font-size: 26px; font-weight: 800;
+            background: linear-gradient(135deg,#667eea,#764ba2);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .ml-metric-label {
+            font-size: 11px; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;
+        }
+        .ml-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media(max-width:700px){ .ml-two-col { grid-template-columns: 1fr; } }
+        .ml-chart-box {
+            background: var(--bg-secondary); border-radius: 12px;
+            padding: 16px; border: 1px solid var(--border-color);
+        }
+        .ml-chart-title {
+            font-size: 13px; font-weight: 700;
+            color: var(--text-primary); margin-bottom: 14px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .ml-dataset-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(102,126,234,0.12); color: #667eea;
+            border: 1px solid rgba(102,126,234,0.3);
+            border-radius: 20px; padding: 4px 12px;
+            font-size: 12px; font-weight: 600; margin-bottom: 14px;
+        }
+        /* confusion matrix */
+        .cm-grid {
+            display: grid; grid-template-columns: auto 1fr 1fr;
+            gap: 6px; font-size: 12px; align-items: center;
+        }
+        .cm-cell {
+            padding: 10px; border-radius: 8px; text-align: center;
+            font-weight: 700; font-size: 15px;
+        }
+        .cm-label { font-size: 11px; color: var(--text-secondary); text-align:center; }
+        .cm-tp { background: rgba(72,187,120,0.2); color: #48bb78; }
+        .cm-tn { background: rgba(102,126,234,0.15); color: #667eea; }
+        .cm-fp { background: rgba(237,137,54,0.2); color: #ed8936; }
+        .cm-fn { background: rgba(245,101,101,0.2); color: #f56565; }
+        /* feature bar */
+        .feat-row {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 8px; font-size: 12px;
+        }
+        .feat-name { width: 200px; color: var(--text-secondary); white-space: nowrap;
+                     overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+        .feat-bar-wrap { flex: 1; background: var(--border-color); border-radius: 4px; height: 10px; }
+        .feat-bar { height: 10px; border-radius: 4px;
+                    background: linear-gradient(90deg,#667eea,#764ba2); }
+        .feat-pct { width: 40px; text-align: right; font-weight: 700; color: var(--text-primary); }
+
+        #xai-overlay {
+            display: none; position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.55); backdrop-filter: blur(3px);
+            align-items: center; justify-content: center;
+        }
+        #xai-overlay.open { display: flex; }
+        #xai-modal {
+            background: var(--bg-card); border-radius: 20px; width: 680px;
+            max-width: 96vw; max-height: 88vh; overflow-y: auto;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.3);
+            animation: chatSlideIn 0.2s ease;
+        }
+        .xai-header {
+            padding: 20px 24px 16px; border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: flex-start;
+        }
+        .xai-title { font-size: 17px; font-weight: 700; color: var(--text-primary); }
+        .xai-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+        .xai-close {
+            background: none; border: 1px solid var(--border-color); color: var(--text-secondary);
+            width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 15px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .xai-close:hover { border-color: #e53e3e; color: #e53e3e; }
+        .xai-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+        .xai-section { }
+        .xai-section-title {
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.8px; color: #667eea; margin-bottom: 10px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .xai-why-box {
+            background: rgba(102,126,234,0.08); border: 1px solid rgba(102,126,234,0.25);
+            border-left: 4px solid #667eea; border-radius: 10px;
+            padding: 12px 16px; font-size: 13.5px; color: var(--text-primary); line-height: 1.6;
+        }
+        .xai-indicators { display: flex; flex-direction: column; gap: 6px; }
+        .xai-indicator {
+            display: flex; align-items: flex-start; gap: 8px;
+            font-size: 13px; color: var(--text-primary);
+        }
+        .xai-indicator::before {
+            content: '⚠'; font-size: 13px; color: #ed8936; flex-shrink: 0; margin-top: 1px;
+        }
+        .xai-mitre-tag {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: linear-gradient(135deg,rgba(102,126,234,0.15),rgba(118,75,162,0.15));
+            border: 1px solid rgba(102,126,234,0.35); border-radius: 10px;
+            padding: 10px 16px; font-size: 13px; color: var(--text-primary);
+        }
+        .xai-mitre-id {
+            font-weight: 800; color: #667eea; font-size: 14px; font-family: monospace;
+        }
+        .xai-score-bars { display: flex; flex-direction: column; gap: 8px; }
+        .xai-score-row { }
+        .xai-score-label {
+            display: flex; justify-content: space-between;
+            font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;
+        }
+        .xai-score-track {
+            height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden;
+        }
+        .xai-score-fill {
+            height: 100%; border-radius: 4px;
+            background: linear-gradient(90deg,#667eea,#764ba2);
+            transition: width 0.6s ease;
+        }
+        .xai-total-score {
+            text-align: center; padding: 14px;
+            background: var(--border-color); border-radius: 12px;
+        }
+        .xai-total-num { font-size: 36px; font-weight: 800; }
+        .xai-total-num.critical { color: #e53e3e; }
+        .xai-total-num.high     { color: #ed8936; }
+        .xai-total-num.medium   { color: #ecc94b; }
+        .xai-total-num.low      { color: #48bb78; }
+        .xai-actions { display: flex; flex-direction: column; gap: 8px; counter-reset: action; }
+        .xai-action {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 14px; background: rgba(56,161,105,0.08);
+            border: 1px solid rgba(56,161,105,0.2); border-radius: 10px;
+            font-size: 13px; color: var(--text-primary);
+            counter-increment: action;
+        }
+        .xai-action::before {
+            content: counter(action); background: #38a169; color: white;
+            width: 20px; height: 20px; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; font-size: 11px;
+            font-weight: 700; flex-shrink: 0;
+        }
+        .xai-context-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+        }
+        .xai-ctx-item {
+            background: var(--border-color); border-radius: 10px;
+            padding: 10px 14px;
+        }
+        .xai-ctx-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
+        .xai-ctx-value { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+        .btn-xai {
+            background: linear-gradient(135deg,#667eea,#764ba2); color: white;
+            border: none; padding: 5px 11px; border-radius: 7px; font-size: 12px;
+            cursor: pointer; font-weight: 600; transition: opacity 0.2s;
+        }
+        .btn-xai:hover { opacity: 0.85; }
+        /* ── End Explainable AI Modal ─────────────────────────── */
+
+        /* ── End Advanced Features ───────────────────────────── */
+
+        /* ── AI Chatbot Widget ───────────────────────────────── */
+        #chat-bubble {
+            position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+            width: 60px; height: 60px; border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; cursor: pointer; font-size: 24px;
+            box-shadow: 0 6px 24px rgba(102,126,234,0.55);
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        #chat-bubble:hover { transform: scale(1.12); box-shadow: 0 8px 32px rgba(102,126,234,0.7); }
+        #chat-bubble .chat-badge {
+            position: absolute; top: 2px; right: 2px;
+            width: 16px; height: 16px; background: #e53e3e;
+            border-radius: 50%; border: 2px solid white;
+            animation: livepulse 2s infinite;
+        }
+        #chat-panel {
+            position: fixed; bottom: 100px; right: 28px; z-index: 9998;
+            width: 390px; max-height: 620px;
+            background: var(--bg-card); border-radius: 20px;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.22);
+            display: none; flex-direction: column; overflow: hidden;
+            border: 1px solid var(--border-color);
+            animation: chatSlideIn 0.25s ease;
+        }
+        @keyframes chatSlideIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to   { opacity: 1; transform: translateY(0)   scale(1); }
+        }
+        #chat-panel.open { display: flex; }
+        .chat-header {
+            padding: 16px 18px; font-weight: 700; font-size: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; display: flex; align-items: center; gap: 10px;
+            justify-content: space-between;
+        }
+        .chat-header-left { display: flex; align-items: center; gap: 10px; }
+        .chat-online-dot {
+            width: 10px; height: 10px; background: #68d391;
+            border-radius: 50%; animation: livepulse 2s infinite;
+        }
+        .chat-close-btn {
+            background: rgba(255,255,255,0.2); border: none; color: white;
+            width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+            font-size: 14px; display: flex; align-items: center; justify-content: center;
+            transition: background 0.2s;
+        }
+        .chat-close-btn:hover { background: rgba(255,255,255,0.35); }
+        #chat-messages {
+            flex: 1; overflow-y: auto; padding: 16px;
+            display: flex; flex-direction: column; gap: 12px;
+            max-height: 380px; scroll-behavior: smooth;
+        }
+        #chat-messages::-webkit-scrollbar { width: 4px; }
+        #chat-messages::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+        .chat-msg {
+            max-width: 88%; padding: 10px 14px; border-radius: 16px;
+            font-size: 13.5px; line-height: 1.55; word-wrap: break-word;
+        }
+        .chat-msg.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border-bottom-right-radius: 4px;
+        }
+        .chat-msg.bot {
+            align-self: flex-start;
+            background: var(--border-color); color: var(--text-primary);
+            border-bottom-left-radius: 4px;
+        }
+        .chat-msg.bot strong { color: #667eea; }
+        .chat-typing {
+            align-self: flex-start; padding: 10px 16px;
+            background: var(--border-color); border-radius: 16px;
+            border-bottom-left-radius: 4px; font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .chat-typing span {
+            display: inline-block; width: 7px; height: 7px;
+            background: #718096; border-radius: 50%; margin: 0 2px;
+            animation: typingBounce 1.2s infinite;
+        }
+        .chat-typing span:nth-child(2) { animation-delay: 0.2s; }
+        .chat-typing span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce {
+            0%,80%,100% { transform: translateY(0); }
+            40%          { transform: translateY(-6px); }
+        }
+        .chat-suggestions {
+            padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px;
+            border-top: 1px solid var(--border-color);
+        }
+        .chat-suggest-btn {
+            background: rgba(102,126,234,0.1); color: #667eea;
+            border: 1px solid rgba(102,126,234,0.3); border-radius: 20px;
+            padding: 4px 10px; font-size: 12px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chat-suggest-btn:hover { background: #667eea; color: white; }
+        .chat-input-row {
+            display: flex; gap: 8px; padding: 12px 14px;
+            border-top: 1px solid var(--border-color);
+        }
+        #chat-input {
+            flex: 1; padding: 9px 14px; border-radius: 20px;
+            border: 1.5px solid var(--border-color);
+            background: var(--bg-card); color: var(--text-primary);
+            font-size: 13.5px; outline: none; font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        #chat-input:focus { border-color: #667eea; }
+        #chat-send {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; border-radius: 50%;
+            width: 38px; height: 38px; cursor: pointer; font-size: 15px;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.15s;
+        }
+        #chat-send:hover { transform: scale(1.1); }
+        /* ── End AI Chatbot ──────────────────────────────────── */
+
+        .api-badge { background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .api-badge.mock { background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%); }
+        .refresh-btn { background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 24px; }
+        .stat-card { background: var(--bg-card); backdrop-filter: blur(10px); border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); position: relative; overflow: hidden; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); }
+        .stat-card.danger::before { background: linear-gradient(90deg, #f56565 0%, #e53e3e 100%); }
+        .stat-card.warning::before { background: linear-gradient(90deg, #ed8936 0%, #dd6b20 100%); }
+        .stat-card.success::before { background: linear-gradient(90deg, #48bb78 0%, #38a169 100%); }
+        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 16px; }
+        .stat-icon.blue { background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%); color: #3182ce; }
+        .stat-icon.red { background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%); color: #e53e3e; }
+        .stat-icon.orange { background: linear-gradient(135deg, #feebc8 0%, #fbd38d 100%); color: #dd6b20; }
+        .stat-icon.green { background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%); color: #38a169; }
+        .stat-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 8px; }
+        .stat-value { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+        .stat-subtitle { font-size: 13px; color: var(--text-secondary); }
+        .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .card { background: var(--bg-card); backdrop-filter: blur(10px); border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+        .chart-wrapper { position: relative; height: 300px; }
+        #threatMap { height: 300px; border-radius: 12px; z-index: 1; }
+        .threats-fullwidth { background: var(--bg-card); backdrop-filter: blur(10px); border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .threats-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+        .threats-title { font-size: 20px; font-weight: 600; color: var(--text-primary); flex: 1 1 200px; min-width: 0; }
+        .action-buttons { display: flex; gap: 10px; flex-wrap: wrap; flex-shrink: 0; align-items: center; }
+        .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; }
+        .btn-primary { background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%); color: #fff; }
+        .btn-primary:hover { filter: brightness(1.05); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-warning { background: linear-gradient(135deg, #ecc94b 0%, #d69e2e 100%); color: #1a202c; }
+        .btn-secondary { background: var(--border-color); color: var(--text-primary); }
+        .threat-list { display: flex; flex-direction: column; gap: 12px; }
+
+        /* Scrollable panels for Audit Log and Incident Management */
+        .panel-scroll {
+            max-height: 420px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .panel-scroll::-webkit-scrollbar { width: 6px; }
+        .panel-scroll::-webkit-scrollbar-track { background: var(--bg-main); border-radius: 4px; }
+        .panel-scroll::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        .panel-scroll::-webkit-scrollbar-thumb:hover { background: #4a5568; }
+        .threat-item { background: var(--border-color); border-radius: 12px; padding: 16px; border-left: 4px solid #cbd5e0; }
+        .threat-item.high { border-left-color: #e53e3e; background: linear-gradient(90deg, rgba(229,62,62,0.1) 0%, var(--border-color) 100%); }
+        .threat-item.medium { border-left-color: #dd6b20; background: linear-gradient(90deg, rgba(221,107,32,0.1) 0%, var(--border-color) 100%); }
+        .threat-item.low { border-left-color: #38a169; background: linear-gradient(90deg, rgba(56,161,105,0.1) 0%, var(--border-color) 100%); }
+        .threat-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+        .threat-type { font-weight: 600; color: var(--text-primary); font-size: 14px; }
+        .risk-badge { padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .risk-badge.high { background: #fed7d7; color: #c53030; }
+        .risk-badge.medium { background: #feebc8; color: #c05621; }
+        .risk-badge.low { background: #c6f6d5; color: #276749; }
+        .threat-meta { display: flex; gap: 20px; margin-bottom: 10px; font-size: 13px; color: var(--text-secondary); }
+        .threat-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px; }
+        .threat-actions { display: flex; gap: 8px; }
+        .btn-small { padding: 6px 12px; font-size: 12px; border-radius: 6px; }
+        .btn-resolve { background: #c6f6d5; color: #276749; border: none; }
+        .btn-false { background: #fed7d7; color: #c53030; border: none; }
+        .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+        .empty-state { text-align: center; padding: 60px; color: var(--text-secondary); }
+        @media (max-width: 1200px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } .main-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 768px) { .stats-grid { grid-template-columns: 1fr; } .header { flex-direction: column; gap: 16px; text-align: center; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1><i class="fas fa-shield-alt"></i> AI-Assisted Security Monitoring</h1>
+                <p>Real-time threat detection and analysis</p>
+            </div>
+            <div class="header-right">
+                <span style="display:inline-flex; align-items:center; gap:6px; margin-right:12px;">
+                    <span id="live-indicator" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#e53e3e; animation:livepulse 1.5s infinite;"></span>
+                    <span id="last-updated" style="font-size: 12px; color: var(--text-secondary);"></span>
+                </span>
+                <button class="theme-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <a href="/api/docs" target="_blank" class="btn btn-secondary" style="text-decoration: none;">
+                    <i class="fas fa-book"></i> API Docs
+                </a>
+                <span id="api-status" class="api-badge">Loading...</span>
+                <button type="button" class="refresh-btn" id="header-refresh-btn" onclick="refreshDashboardFull()">
+                    <i class="fas fa-sync-alt" id="header-refresh-icon"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon blue"><i class="fas fa-file-alt"></i></div>
+                <div class="stat-label">Total Logs</div>
+                <div class="stat-value" id="total-logs">-</div>
+                <div class="stat-subtitle">Processed</div>
+            </div>
+            <div class="stat-card danger">
+                <div class="stat-icon red"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="stat-label">Threats Detected</div>
+                <div class="stat-value" id="total-threats">-</div>
+                <div class="stat-subtitle">All time</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="stat-icon orange"><i class="fas fa-fire"></i></div>
+                <div class="stat-label">Active Threats</div>
+                <div class="stat-value" id="active-threats">-</div>
+                <div class="stat-subtitle">Require attention</div>
+            </div>
+            <div class="stat-card success">
+                <div class="stat-icon green"><i class="fas fa-clock"></i></div>
+                <div class="stat-label">Recent Activity</div>
+                <div class="stat-value" id="recent-activity">-</div>
+                <div class="stat-subtitle">Last 24 hours (UTC) — event time or ingest time</div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-chart-pie"></i> Threats by Type</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="threatChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-globe"></i> Threat Map</h3>
+                </div>
+                <div id="threatMap"></div>
+            </div>
+        </div>
+
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-radiation"></i> Recent Threats</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="exportCSV()">
+                        <i class="fas fa-file-csv"></i> Export CSV
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportPDF()">
+                        <i class="fas fa-file-pdf"></i> Export PDF
+                    </button>
+                    <button class="btn btn-secondary" onclick="testAlert()">
+                        <i class="fas fa-paper-plane"></i> Test Alert
+                    </button>
+                    <button class="btn btn-secondary" onclick="testAI()">
+                        <i class="fas fa-brain"></i> Test AI
+                    </button>
+                </div>
+            </div>
+            <div id="threats-list" class="threat-list">
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading threats...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Incident Management Section -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-exclamation-triangle"></i> Incident Management</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadIncidents()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn btn-primary" onclick="showCreateIncidentModal()">
+                        <i class="fas fa-plus"></i> Create Incident
+                    </button>
+                </div>
+            </div>
+            <div id="incidents-list" class="threat-list panel-scroll">
+                <div class="empty-state">
+                    <i class="fas fa-clipboard-list" style="font-size: 48px; color: var(--text-secondary);"></i>
+                    <p>Loading incidents...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attack Timeline Section -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-stream"></i> Attack Timeline</h2>
+                <div class="action-buttons">
+                    <select id="timeline-hours" onchange="loadAttackTimeline({ quiet: false })" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-primary);">
+                        <option value="6">Last 6 Hours</option>
+                        <option value="12">Last 12 Hours</option>
+                        <option value="24" selected>Last 24 Hours</option>
+                        <option value="48">Last 48 Hours</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="loadAttackTimeline()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div id="attack-timeline" class="timeline-container" style="background: var(--bg-card); padding: 20px; border-radius: 12px; max-height: 400px; overflow-y: auto;">
+                <div class="empty-state">
+                    <i class="fas fa-clock" style="font-size: 48px; color: var(--text-secondary);"></i>
+                    <p>Timeline loads automatically with live stats (every 5s). Use Refresh to reload now.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Management System Section -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-bell"></i> Alert Management System</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadAlertRules()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn btn-primary" onclick="showCreateAlertRuleModal()">
+                        <i class="fas fa-plus"></i> Add Rule
+                    </button>
+                    <button class="btn btn-warning" onclick="loadAlertSuppression()">
+                        <i class="fas fa-ban"></i> Suppression
+                    </button>
+                </div>
+            </div>
+            <div id="alert-rules-list" class="threat-list">
+                <div class="empty-state">
+                    <i class="fas fa-bell-slash" style="font-size: 48px; color: var(--text-secondary);"></i>
+                    <p>Loading alert rules...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Search & Filtering Section -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-search"></i> Log Search & Filtering</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="searchLogs()">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+            <div class="log-howto-panel" style="margin-bottom:16px;padding:16px 18px;border-radius:12px;border-left:4px solid #667eea;background:var(--bg-card);box-shadow:0 2px 8px rgba(0,0,0,0.06);font-size:13px;line-height:1.65;color:var(--text-secondary);">
+                <div style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:14px;">
+                    <i class="fas fa-info-circle" style="color:#667eea;"></i> How to check your logs
+                </div>
+                <ul style="margin:0;padding-left:1.2em;">
+                    <li><strong>Place log files</strong> in the project <code style="background:rgba(102,126,234,0.12);padding:2px 8px;border-radius:4px;font-size:12px;">logs</code> folder (next to <code style="background:rgba(102,126,234,0.12);padding:2px 8px;border-radius:4px;font-size:12px;">working_app.py</code>). To use another folder, set <code style="background:rgba(102,126,234,0.12);padding:2px 8px;border-radius:4px;font-size:12px;">LOG_DIRECTORY</code> in <code style="background:rgba(102,126,234,0.12);padding:2px 8px;border-radius:4px;font-size:12px;">.env</code> and restart the server.</li>
+                    <li>Use <strong>.log</strong> files (e.g. <code style="font-size:12px;">apache_access.log</code>, <code style="font-size:12px;">ssh_auth.log</code>, <code style="font-size:12px;">firewall.log</code>). The app ingests them on startup and keeps watching for new lines while it runs.</li>
+                    <li>Below, enter <strong>text</strong>, <strong>source IP</strong>, and/or <strong>dates</strong>, then click <strong>Search</strong> to query what is stored in the database. Summary counts appear in the header stats above.</li>
+                    <li>Keep the SOC server running and use the dashboard URL shown in the console when you start <code style="background:rgba(102,126,234,0.12);padding:2px 8px;border-radius:4px;font-size:12px;">working_app.py</code> (often <code style="font-size:12px;">http://127.0.0.1:15500</code> unless you changed <code style="font-size:12px;">SOC_PORT</code>).</li>
+                </ul>
+            </div>
+            <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; margin-bottom: 16px;">
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <input type="text" id="search-text" placeholder="Search text in logs..." autocomplete="off" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-primary);">
+                    <input type="text" id="search-ip" placeholder="Source IP..." autocomplete="off" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-primary);">
+                    <input type="date" id="search-start" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-primary);">
+                    <input type="date" id="search-end" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-primary);">
+                </div>
+                <div class="action-buttons" style="margin-bottom: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="searchLogs()">
+                        <i class="fas fa-search"></i> Search logs
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearLogSearch()">
+                        <i class="fas fa-eraser"></i> Clear filters
+                    </button>
+                </div>
+                <div id="ip-reputation-result" style="margin-bottom: 16px;"></div>
+            </div>
+            <div id="search-results" class="threat-list">
+                <div class="empty-state">
+                    <i class="fas fa-file-alt" style="font-size: 48px; color: var(--text-secondary);"></i>
+                    <p>Enter search criteria and click Search</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attack Pattern Detection Section -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-wave-square"></i> Attack Pattern Detection</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadAttackPatterns()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn btn-primary" onclick="detectAttackPatterns()">
+                        <i class="fas fa-search"></i> Detect Now
+                    </button>
+                </div>
+            </div>
+            <div id="attack-patterns-list" class="threat-list">
+                <div class="empty-state">
+                    <i class="fas fa-brain" style="font-size: 48px; color: var(--text-secondary);"></i>
+                    <p>Click "Detect Now" to analyze attack patterns</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Apriori — Association rules over threat co-occurrence -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-project-diagram"></i> Apriori — Association Rules</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadAprioriRules()">
+                        <i class="fas fa-sync"></i> Apriori (SOC hours)
+                    </button>
+                    <button class="btn btn-primary" onclick="loadAprioriCicids()">
+                        <i class="fas fa-database"></i> Apriori (CICIDS flows)
+                    </button>
+                </div>
+            </div>
+            <p style="padding:0 16px 8px;font-size:13px;color:var(--text-secondary);line-height:1.5;margin:0;">
+                <strong>SOC mode:</strong> Apriori uses <strong>UTC hour</strong> buckets first; if each hour has only one <code>threat_type</code>, it automatically retries with <strong>UTC calendar day</strong> buckets so types on the same day can co-occur. Optional API: <code>bucket=hour|day|auto</code>, <code>hours</code> lookback.
+                <strong>CICIDS mode:</strong> each transaction = one flow row with <strong>quantile bins</strong> (lo/mid/hi) on flow features + <code>outcome_attack</code> / <code>outcome_normal</code> — same dataset family as the Random Forest, but categorical for Apriori.
+                Requires <code>mlxtend</code> for both.
+            </p>
+            <div style="padding:0 16px 8px;font-size:12px;font-weight:600;color:var(--text-secondary);">A. SOC database (threat types / hour)</div>
+            <div id="apriori-soc-list" class="threat-list" style="padding:8px 16px 16px;">
+                <div class="empty-state" style="padding:24px;"><p>Click <strong>Apriori (SOC hours)</strong></p></div>
+            </div>
+            <div style="padding:8px 16px 4px;font-size:12px;font-weight:600;color:var(--text-secondary);">B. CICIDS dataset (discretised flows — same source as Random Forest)</div>
+            <div id="apriori-cicids-list" class="threat-list" style="padding:8px 16px 16px;">
+                <div class="empty-state" style="padding:24px;"><p>Click <strong>Apriori (CICIDS flows)</strong></p></div>
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- ADVANCED FEATURES                                  -->
+        <!-- ════════════════════════════════════════════════════ -->
+
+        <!-- System Health Monitor -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-server"></i> System Health Monitor</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadSystemHealth()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div id="system-health-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;padding:16px;">
+                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             ML MODEL PANEL  —  CICIDS 2017
+        ══════════════════════════════════════════════════════ -->
+        <div class="threats-fullwidth" id="ml-model-section">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-brain"></i> ML Model — CICIDS 2017 Dataset</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadModelInfo()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div style="padding:16px;" id="ml-model-body">
+                <div style="color:var(--text-secondary);font-size:13px;">Loading model info…</div>
+            </div>
+        </div>
+
+        <!-- MITRE ATT&CK Heatmap -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-fire"></i> MITRE ATT&CK Heatmap</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadMitreHeatmap()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div style="padding:16px;">
+                <div id="mitre-summary" style="margin-bottom:16px;font-size:13px;color:var(--text-secondary);"></div>
+                <div id="mitre-heatmap-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Two-column: Attack Hour Heatmap + IP Blocklist -->
+        <div class="main-grid">
+            <!-- Attack Hour Heatmap -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-clock"></i> Attack Hour Heatmap</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="hourHeatmapChart"></canvas>
+                </div>
+                <div id="peak-hour-label" style="text-align:center;font-size:13px;color:var(--text-secondary);padding-bottom:8px;"></div>
+            </div>
+
+            <!-- IP Auto-Blocklist -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-ban"></i> IP Auto-Blocklist</h3>
+                    <div style="display:flex;gap:8px;">
+                        <input id="block-ip-input" type="text" placeholder="Enter IP to block"
+                               style="padding:6px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);font-size:13px;width:140px;">
+                        <button class="btn btn-secondary" onclick="manualBlockIP()" style="padding:6px 12px;font-size:13px;">
+                            <i class="fas fa-ban"></i> Block
+                        </button>
+                    </div>
+                </div>
+                <div id="blocklist-container" class="threat-list" style="max-height:280px;overflow-y:auto;">
+                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Honeypot Hits -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-spider"></i> Honeypot Trap Hits</h2>
+                <div class="action-buttons">
+                    <span id="honeypot-badge" style="background:linear-gradient(135deg,#e53e3e,#c53030);color:white;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;">0 HITS</span>
+                    <button class="btn btn-secondary" onclick="loadHoneypotHits()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div id="honeypot-list" class="threat-list">
+                <div class="empty-state">
+                    <i class="fas fa-spider" style="font-size:48px;color:var(--text-secondary);"></i>
+                    <p>No honeypot hits yet. Try visiting <code>/admin</code> or <code>/wp-login.php</code></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Testing Dashboard Section -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-vial"></i> Testing Dashboard</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="runTests()">
+                        <i class="fas fa-play"></i> Run Tests
+                    </button>
+                </div>
+            </div>
+            <div id="testing-results" class="threat-list">
+                <div class="empty-state">
+                    <i class="fas fa-flask" style="font-size: 48px; color: var(--text-secondary);"></i>
+                    <p>Click "Run Tests" to execute test suite</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Audit Log Section -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-shield-alt"></i> Security Audit Log</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadAuditLogs()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div id="audit-logs" class="threat-list panel-scroll">
+                <div class="empty-state">
+                    <i class="fas fa-clipboard-list" style="font-size: 48px; color: var(--text-secondary);"></i>
+                    <p>Loading audit logs...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- GDPR Compliance Section -->
+        <div class="threats-fullwidth">
+            <div class="threats-header">
+                <h2 class="threats-title"><i class="fas fa-user-shield"></i> GDPR Compliance</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="loadComplianceInfo()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div id="compliance-info" class="threat-list">
+                <div class="empty-state">
+                    <i class="fas fa-balance-scale" style="font-size: 48px; color: var(--text-secondary);"></i>
+                    <p>Loading compliance information...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let threatChart, threatMap, mapMarkers = [];
+
+        function initMap() {
+            threatMap = L.map('threatMap').setView([20, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: 'OpenStreetMap contributors'
+            }).addTo(threatMap);
+        }
+
+        function updateThreatMap(threats) {
+            if (!threatMap) initMap();
+            mapMarkers.forEach(marker => threatMap.removeLayer(marker));
+            mapMarkers = [];
+            threats.forEach(threat => {
+                if (threat.location && threat.location.latitude && threat.location.longitude) {
+                    const color = threat.risk_level === 'HIGH' ? '#e53e3e' : threat.risk_level === 'MEDIUM' ? '#dd6b20' : '#38a169';
+                    const marker = L.circleMarker([threat.location.latitude, threat.location.longitude], {
+                        radius: 8, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.8
+                    }).addTo(threatMap);
+                    marker.bindPopup(`<div style="font-weight:600">${threat.threat_type.replace(/_/g, ' ').toUpperCase()}</div><div>${threat.source_ip} - Score: ${threat.risk_score}/10</div>`);
+                    mapMarkers.push(marker);
+                }
+            });
+        }
+
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            const icon = document.querySelector('.theme-toggle i');
+            icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        if (savedTheme === 'dark') {
+            document.querySelector('.theme-toggle i').className = 'fas fa-sun';
+        }
+
+        function initWebSocket() {
+            // WebSocket disabled - using polling instead
+            console.log('WebSocket disabled - using polling for updates');
+        }
+
+        function updateStatsDisplay(stats) {
+            document.getElementById('total-logs').textContent = stats.total_logs.toLocaleString();
+            document.getElementById('total-threats').textContent = stats.total_threats.toLocaleString();
+            document.getElementById('active-threats').textContent = stats.active_threats.toLocaleString();
+            document.getElementById('recent-activity').textContent = `${stats.recent_logs} logs, ${stats.recent_threats} threats`;
+            updateThreatChart(stats.threats_by_type);
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                updateStatsDisplay(stats);
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        function updateThreatChart(threatsByType) {
+            const ctx = document.getElementById('threatChart').getContext('2d');
+            if (threatChart) threatChart.destroy();
+            const labels = Object.keys(threatsByType).map(type => type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+            const data = Object.values(threatsByType);
+            threatChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: labels, datasets: [{ data: data, backgroundColor: ['#e53e3e', '#dd6b20', '#3182ce', '#38a169', '#805ad5'], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true } } }, cutout: '65%' }
+            });
+        }
+
+        function loadThreats() { refreshCoreStats(); }
+
+        async function updateThreatStatus(threatId, status) {
+            try {
+                await fetch(`/api/threats/${threatId}/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: status })
+                });
+                refreshCoreStats();
+            } catch (error) {
+                console.error('Error updating threat:', error);
+            }
+        }
+
+        async function loadAPIStatus() {
+            try {
+                const response = await fetch('/api/threat-intelligence/config');
+                const data = await response.json();
+                const config = data.config;
+                const statusEl = document.getElementById('api-status');
+                if (config.real_apis_enabled && (config.virustotal_configured || config.abuseipdb_configured)) {
+                    statusEl.textContent = 'Real APIs';
+                    statusEl.className = 'api-badge';
+                } else {
+                    statusEl.textContent = 'Mock APIs';
+                    statusEl.className = 'api-badge mock';
+                }
+            } catch (error) {
+                console.error('Error loading API status:', error);
+            }
+        }
+
+        // Primary polling function — fetches stats + threats in parallel
+        function renderThreatCard(threat) {
+            const level = (threat.risk_level || 'low').toLowerCase();
+            const ts    = threat.timestamp ? new Date(threat.timestamp).toLocaleString() : 'N/A';
+            const score = (threat.risk_score || 0).toFixed(1);
+            const desc  = (threat.description || '').substring(0, 160);
+            const name  = threat.threat_type.replace(/_/g, ' ').toUpperCase();
+            const aiBox = threat.ai_explanation
+                ? `<details style="margin-bottom:12px;">
+                       <summary style="cursor:pointer;color:#3182ce;font-size:13px;font-weight:500;">
+                           <i class="fas fa-robot"></i> AI Analysis
+                       </summary>
+                       <p style="margin-top:8px;padding:12px;background:#ebf8ff;border-radius:8px;font-size:13px;color:#2c5282;">
+                           ${threat.ai_explanation}
+                       </p>
+                   </details>` : '';
+            return `
+                <div class="threat-item ${level}">
+                    <div class="threat-header">
+                        <div class="threat-type"><i class="fas fa-bug" style="margin-right:8px;"></i>${name}</div>
+                        <span class="risk-badge ${level}">${threat.risk_level || 'LOW'} Risk</span>
+                    </div>
+                    <div class="threat-meta">
+                        <span><i class="fas fa-server"></i> ${threat.source_ip}</span>
+                        <span><i class="fas fa-calendar"></i> ${ts}</span>
+                        <span><i class="fas fa-chart-line"></i> Score: ${score}/10</span>
+                    </div>
+                    <p class="threat-desc">${desc}</p>
+                    ${aiBox}
+                    <div class="threat-actions">
+                        <button class="btn-xai" onclick="openXAI(${threat.id})">
+                            <i class="fas fa-brain"></i> Explain
+                        </button>
+                        <button class="btn btn-small btn-resolve" onclick="updateThreatStatus(${threat.id},'resolved')">
+                            <i class="fas fa-check"></i> Resolve
+                        </button>
+                        <button class="btn btn-small btn-false" onclick="updateThreatStatus(${threat.id},'false_positive')">
+                            <i class="fas fa-times"></i> False Positive
+                        </button>
+                    </div>
+                </div>`;
+        }
+
+        /** Lightweight poll — stats, threats, map (runs every 5s). */
+        async function refreshCoreStats() {
+            let stats = null;
+            let threats = [];
+
+            try {
+                const r = await fetch('/api/stats');
+                if (r.ok) stats = await r.json();
+            } catch(e) { console.warn('Stats fetch error:', e); }
+
+            try {
+                const r = await fetch('/api/threats?limit=20');
+                if (r.ok) threats = await r.json();
+                if (!Array.isArray(threats)) threats = [];
+            } catch(e) { console.warn('Threats fetch error:', e); }
+
+            if (stats) updateStatsDisplay(stats);
+            updateThreatMap(threats);
+
+            const threatsList = document.getElementById('threats-list');
+            if (threatsList) {
+                if (threats.length === 0) {
+                    threatsList.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color:#38a169;font-size:48px;"></i><p>No threats detected. Your system is secure!</p></div>';
+                } else {
+                    threatsList.innerHTML = threats.map(renderThreatCard).join('');
+                }
+            }
+
+            const indicator = document.getElementById('live-indicator');
+            if (indicator) {
+                indicator.style.background = '#38a169';
+                setTimeout(() => { indicator.style.background = '#e53e3e'; }, 400);
+            }
+
+            const el = document.getElementById('last-updated');
+            if (el && stats) {
+                const now = new Date();
+                el.textContent = `LIVE · ${now.toLocaleTimeString()} · ${stats.total_logs} logs · ${stats.total_threats} threats`;
+            }
+
+            loadAPIStatus();
+            if (!threatMap) initMap();
+
+            // Keep attack timeline aligned with stats/threats (was 30s-only before).
+            loadAttackTimeline({ quiet: true }).catch(() => {});
+        }
+
+        /** Header Refresh — reloads every dashboard section (not just top stats). */
+        async function refreshDashboardFull() {
+            const btn = document.getElementById('header-refresh-btn');
+            const icon = document.getElementById('header-refresh-icon');
+            if (btn) btn.disabled = true;
+            if (icon) icon.classList.add('fa-spin');
+            try {
+                await refreshCoreStats();
+                const tasks = [
+                    loadIncidents(), loadAttackTimeline(), loadAlertRules(),
+                    loadAuditLogs(), loadAttackPatterns(), loadAprioriRules(),
+                    loadComplianceInfo(),
+                    loadModelInfo(), loadSystemHealth(), loadMitreHeatmap(),
+                    loadAttackHeatmap(), loadBlocklist(), loadHoneypotHits(),
+                ];
+                await Promise.all(tasks.map(p => Promise.resolve(p).catch(err => console.warn('Section refresh:', err))));
+            } finally {
+                if (btn) btn.disabled = false;
+                if (icon) icon.classList.remove('fa-spin');
+            }
+        }
+
+        async function testAlert() {
+            try {
+                const response = await fetch('/api/test/alert');
+                const result = await response.json();
+                alert(result.success ? 'Test alert sent!' : 'Failed to send test alert');
+            } catch (error) {
+                alert('Error sending test alert');
+            }
+        }
+
+        async function testAI() {
+            try {
+                const response = await fetch('/api/test/ai');
+                const result = await response.json();
+                alert(result.success ? 'AI connection successful!' : 'AI connection failed');
+            } catch (error) {
+                alert('Error testing AI connection');
+            }
+        }
+
+        function exportCSV() {
+            window.open('/api/export/csv', '_blank');
+        }
+
+        function exportPDF() {
+            window.open('/api/export/pdf', '_blank');
+        }
+
+        // Testing Dashboard Functions
+        async function runTests() {
+            const resultsDiv = document.getElementById('testing-results');
+            resultsDiv.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Running tests...</div>';
+            
+            try {
+                const response = await fetch('/api/testing/run', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color: #e53e3e; font-size: 48px;"></i><p>Error: ${data.error}</p></div>`;
+                    return;
+                }
+                
+                let html = `
+                    <div style="background: var(--bg-card); padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                            <span><strong>Total:</strong> ${data.total}</span>
+                            <span style="color: #38a169;"><strong>Passed:</strong> ${data.passed}</span>
+                            <span style="color: #e53e3e;"><strong>Failed:</strong> ${data.failed}</span>
+                        </div>
+                        <div style="height: 8px; background: var(--border-color); border-radius: 4px; overflow: hidden;">
+                            <div style="width: ${(data.passed/data.total)*100}%; height: 100%; background: linear-gradient(90deg, #38a169, #48bb78);"></div>
+                        </div>
+                    </div>
+                `;
+                
+                html += data.results.map(result => `
+                    <div class="threat-item ${result.status}">
+                        <div class="threat-header">
+                            <div class="threat-type">
+                                <i class="fas ${result.status === 'passed' ? 'fa-check-circle' : 'fa-times-circle'}" style="margin-right: 8px; color: ${result.status === 'passed' ? '#38a169' : '#e53e3e'};"></i>
+                                ${result.test_name}
+                            </div>
+                            <span class="risk-badge ${result.status === 'passed' ? 'low' : 'high'}">${result.status.toUpperCase()}</span>
+                        </div>
+                        <div class="threat-meta">
+                            <span><i class="fas fa-tag"></i> ${result.test_type}</span>
+                            <span><i class="fas fa-clock"></i> ${result.duration_ms.toFixed(2)}ms</span>
+                        </div>
+                        ${result.error_message ? `<p style="color: #e53e3e; margin-top: 8px;"><i class="fas fa-exclamation-triangle"></i> ${result.error_message}</p>` : ''}
+                    </div>
+                `).join('');
+                
+                resultsDiv.innerHTML = html;
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color: #e53e3e; font-size: 48px;"></i><p>Error running tests: ${error.message}</p></div>`;
+            }
+        }
+
+        // Security Audit Log Functions
+        async function loadAuditLogs() {
+            try {
+                const response = await fetch('/api/audit-logs');
+                const logs = await response.json();
+                const logsDiv = document.getElementById('audit-logs');
+                
+                if (logs.length === 0) {
+                    logsDiv.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color: #38a169; font-size: 48px;"></i><p>No audit logs found</p></div>';
+                    return;
+                }
+                
+                logsDiv.innerHTML = logs.map(log => `
+                    <div class="threat-item ${log.severity === 'high' ? 'high' : log.severity === 'warning' ? 'medium' : 'low'}">
+                        <div class="threat-header">
+                            <div class="threat-type">
+                                <i class="fas fa-shield-alt" style="margin-right: 8px;"></i>
+                                ${log.action}
+                            </div>
+                            <span class="risk-badge ${log.severity === 'high' ? 'high' : log.severity === 'warning' ? 'medium' : 'low'}">${log.severity.toUpperCase()}</span>
+                        </div>
+                        <div class="threat-meta">
+                            <span><i class="fas fa-user"></i> ${log.user || 'System'}</span>
+                            <span><i class="fas fa-clock"></i> ${new Date(log.timestamp).toLocaleString()}</span>
+                            <span><i class="fas fa-server"></i> ${log.resource_type || 'N/A'}</span>
+                        </div>
+                        ${log.details ? `<p class="threat-desc">${log.details}</p>` : ''}
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading audit logs:', error);
+            }
+        }
+
+        // GDPR Compliance Functions
+        async function loadComplianceInfo() {
+            try {
+                const response = await fetch('/api/compliance/gdpr');
+                const data = await response.json();
+                const complianceDiv = document.getElementById('compliance-info');
+                
+                complianceDiv.innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div style="background: var(--bg-card); padding: 16px; border-radius: 12px; border-left: 4px solid #38a169;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-primary);"><i class="fas fa-database"></i> Data Retention</h4>
+                            <p><strong>Total Logs:</strong> ${data.data_retention.total_log_entries.toLocaleString()}</p>
+                            <p><strong>Old Logs (>90 days):</strong> ${data.data_retention.logs_older_than_90_days.toLocaleString()}</p>
+                            <p><strong>Policy:</strong> ${data.data_retention.retention_policy}</p>
+                            <p style="color: ${data.data_retention.compliant ? '#38a169' : '#e53e3e'};">
+                                <i class="fas ${data.data_retention.compliant ? 'fa-check-circle' : 'fa-exclamation-triangle'}"></i>
+                                ${data.data_retention.compliant ? 'Compliant' : 'Non-Compliant'}
+                            </p>
+                        </div>
+                        
+                        <div style="background: var(--bg-card); padding: 16px; border-radius: 12px; border-left: 4px solid #3182ce;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-primary);"><i class="fas fa-user-shield"></i> Personal Data</h4>
+                            <p><strong>Unique IPs:</strong> ${data.personal_data.unique_ip_addresses.toLocaleString()}</p>
+                            <p><strong>Classification:</strong> ${data.personal_data.ip_address_classification}</p>
+                            <p><strong>Basis:</strong> ${data.personal_data.processing_basis}</p>
+                        </div>
+                        
+                        <div style="background: var(--bg-card); padding: 16px; border-radius: 12px; border-left: 4px solid #805ad5;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-primary);"><i class="fas fa-user-check"></i> Data Subject Rights</h4>
+                            ${Object.entries(data.data_subject_rights).map(([right, enabled]) => `
+                                <p><i class="fas ${enabled ? 'fa-check text-green-500' : 'fa-times text-red-500'}" style="color: ${enabled ? '#38a169' : '#e53e3e'};"></i> ${right.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+                            `).join('')}
+                        </div>
+                        
+                        <div style="background: var(--bg-card); padding: 16px; border-radius: 12px; border-left: 4px solid #dd6b20;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-primary);"><i class="fas fa-lock"></i> Security Measures</h4>
+                            ${data.security_measures.map(measure => `
+                                <p><i class="fas fa-check-circle" style="color: #38a169;"></i> ${measure}</p>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading compliance info:', error);
+            }
+        }
+
+        // Attack Timeline Functions
+        async function loadAttackTimeline(options = {}) {
+            const quiet = options.quiet === true;
+            const hoursEl = document.getElementById('timeline-hours');
+            const timelineDiv = document.getElementById('attack-timeline');
+            if (!hoursEl || !timelineDiv) return;
+
+            const hours = hoursEl.value;
+            if (!quiet) {
+                timelineDiv.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading timeline...</div>';
+            }
+            
+            try {
+                const response = await fetch(`/api/timeline?hours=${hours}`, { cache: 'no-store' });
+                const data = await response.json();
+                
+                if (data.error) {
+                    timelineDiv.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color: #e53e3e; font-size: 48px;"></i><p>${data.error}</p></div>`;
+                    return;
+                }
+                const events = Array.isArray(data.timeline) ? data.timeline : [];
+                if (events.length === 0) {
+                    timelineDiv.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color: #38a169; font-size: 48px;"></i><p>No events in selected time period</p></div>';
+                    return;
+                }
+                
+                let html = '<div style="position: relative; padding-left: 20px;">';
+                html += '<div style="position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--border-color);"></div>';
+                
+                html += events.map(event => {
+                    const sev = (event.severity || 'low').toLowerCase();
+                    const dot = sev === 'critical' ? '#e53e3e' : sev === 'high' ? '#dd6b20' : sev === 'medium' ? '#d69e2e' : '#38a169';
+                    const when = event.timestamp ? new Date(event.timestamp).toLocaleString() : '—';
+                    const title = (event.title || '').replace(/</g, '&lt;');
+                    const desc = (event.description || '').replace(/</g, '&lt;');
+                    const typeBadge = event.type === 'incident' ? '<span style="font-size:11px;opacity:0.8;margin-right:8px;">[Incident]</span>' : '';
+                    return `
+                    <div style="position: relative; margin-bottom: 16px; padding-left: 20px;">
+                        <div style="position: absolute; left: -16px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: ${dot}; border: 2px solid var(--bg-card);"></div>
+                        <div style="background: var(--bg-main); padding: 12px; border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-weight: 600; color: var(--text-primary);">${typeBadge}${title}</span>
+                                <span class="risk-badge ${sev}">${sev.toUpperCase()}</span>
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">
+                                <i class="fas fa-clock"></i> ${when}
+                                ${event.source_ip ? `<span style="margin-left: 12px;"><i class="fas fa-server"></i> ${String(event.source_ip).replace(/</g, '')}</span>` : ''}
+                            </div>
+                            ${desc ? `<p style="font-size: 13px; color: var(--text-secondary); margin: 0;">${desc}</p>` : ''}
+                        </div>
+                    </div>`;
+                }).join('');
+                
+                html += '</div>';
+                timelineDiv.innerHTML = html;
+            } catch (error) {
+                timelineDiv.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color: #e53e3e; font-size: 48px;"></i><p>Error loading timeline</p></div>`;
+                console.error('Error loading attack timeline:', error);
+            }
+        }
+
+        // Alert Management Functions
+        async function loadAlertRules() {
+            try {
+                const response = await fetch('/api/alert-rules');
+                const rules = await response.json();
+                const rulesDiv = document.getElementById('alert-rules-list');
+                
+                if (rules.length === 0) {
+                    rulesDiv.innerHTML = '<div class="empty-state"><i class="fas fa-bell-slash" style="color: #718096; font-size: 48px;"></i><p>No alert rules configured</p></div>';
+                    return;
+                }
+                
+                rulesDiv.innerHTML = rules.map(rule => `
+                    <div class="threat-item ${rule.is_active ? 'active' : 'inactive'}">
+                        <div class="threat-header">
+                            <div class="threat-type">
+                                <i class="fas fa-bell" style="margin-right: 8px; color: ${rule.is_active ? '#38a169' : '#718096'};"></i>
+                                ${rule.name}
+                                <span class="risk-badge ${rule.severity_threshold}" style="margin-left: 8px; font-size: 10px;">${rule.severity_threshold.toUpperCase()}</span>
+                            </div>
+                            <span class="risk-badge ${rule.is_active ? 'low' : 'medium'}">${rule.is_active ? 'Active' : 'Inactive'}</span>
+                        </div>
+                        <div class="threat-meta">
+                            <span><i class="fas fa-tag"></i> ${rule.rule_type}</span>
+                            <span><i class="fas fa-broadcast-tower"></i> ${rule.notification_channels.join(', ')}</span>
+                            <span><i class="fas fa-fire"></i> Triggered: ${rule.trigger_count} times</span>
+                        </div>
+                        <p class="threat-desc">${rule.description || 'No description'}</p>
+                        <div class="threat-actions">
+                            <button class="btn btn-small btn-resolve" onclick="toggleAlertRule(${rule.id}, ${!rule.is_active})">
+                                <i class="fas fa-${rule.is_active ? 'pause' : 'play'}"></i> ${rule.is_active ? 'Disable' : 'Enable'}
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading alert rules:', error);
+            }
+        }
+
+        async function toggleAlertRule(ruleId, enable) {
+            try {
+                await fetch(`/api/alert-rules/${ruleId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: enable })
+                });
+                loadAlertRules();
+            } catch (error) {
+                console.error('Error toggling alert rule:', error);
+            }
+        }
+
+        function showCreateAlertRuleModal() {
+            const name = prompt('Enter rule name:');
+            if (!name) return;
+            
+            const description = prompt('Enter description:');
+            const ruleType = prompt('Enter rule type (threshold/pattern/ioc_match):', 'threshold');
+            const severity = prompt('Enter severity threshold (low/medium/high/critical):', 'medium');
+            const channels = prompt('Enter notification channels (comma-separated):', 'dashboard,telegram');
+            
+            fetch('/api/alert-rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    description: description,
+                    rule_type: ruleType,
+                    severity_threshold: severity,
+                    notification_channels: channels.split(',').map(c => c.trim()),
+                    conditions: { threshold: 5 }
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Alert rule created successfully!');
+                    loadAlertRules();
+                }
+            })
+            .catch(error => console.error('Error creating alert rule:', error));
+        }
+
+        async function loadAlertSuppression() {
+            try {
+                const response = await fetch('/api/alert-suppression');
+                const suppressions = await response.json();
+                
+                if (suppressions.length === 0) {
+                    alert('No active suppression rules');
+                    return;
+                }
+                
+                let message = 'Active Suppression Rules:\n\n';
+                suppressions.forEach(s => {
+                    message += `- ${s.rule_name}: ${s.suppression_type}=${s.match_value} (${s.duration_minutes}min)\n`;
+                });
+                alert(message);
+            } catch (error) {
+                console.error('Error loading suppressions:', error);
+            }
+        }
+
+        // Log Search & Filtering Functions
+        async function searchLogs() {
+            const searchText = document.getElementById('search-text').value;
+            const searchIP = document.getElementById('search-ip').value;
+            const startDate = document.getElementById('search-start').value;
+            const endDate = document.getElementById('search-end').value;
+            const resultsDiv = document.getElementById('search-results');
+            
+            resultsDiv.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Searching logs...</div>';
+            
+            try {
+                const response = await fetch('/api/logs/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        search_text: searchText,
+                        source_ip: searchIP,
+                        start_date: startDate,
+                        end_date: endDate
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color: #e53e3e; font-size: 48px;"></i><p>Error: ${data.error}</p></div>`;
+                    return;
+                }
+                
+                if (data.logs.length === 0) {
+                    resultsDiv.innerHTML = '<div class="empty-state"><i class="fas fa-search" style="color: #718096; font-size: 48px;"></i><p>No logs found matching criteria</p></div>';
+                    return;
+                }
+                
+                resultsDiv.innerHTML = `
+                    <div style="margin-bottom: 12px; color: var(--text-secondary);">
+                        Found ${data.total} total results (showing ${data.logs.length})
+                    </div>
+                    ${data.logs.map(log => `
+                        <div class="threat-item" style="margin-bottom: 8px;">
+                            <div class="threat-meta">
+                                <span><i class="fas fa-clock"></i> ${new Date(log.timestamp).toLocaleString()}</span>
+                                <span><i class="fas fa-server"></i> ${log.source_ip || 'N/A'}</span>
+                                <span><i class="fas fa-door-open"></i> Port ${log.destination_port || 'N/A'}</span>
+                                <span class="risk-badge ${log.action === 'blocked' ? 'high' : log.action === 'alert' ? 'medium' : 'low'}">${log.action || 'unknown'}</span>
+                            </div>
+                            <p style="font-family: monospace; font-size: 12px; margin-top: 8px; color: var(--text-secondary); word-break: break-all;">${log.raw_log}</p>
+                        </div>
+                    `).join('')}
+                `;
+                
+                // Check IP reputation if IP filter is used
+                if (searchIP) {
+                    checkIPReputation(searchIP);
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color: #e53e3e; font-size: 48px;"></i><p>Error searching logs: ${error.message}</p></div>`;
+            }
+        }
+
+        function clearLogSearch() {
+            const st = document.getElementById('search-text');
+            const sip = document.getElementById('search-ip');
+            const ds = document.getElementById('search-start');
+            const de = document.getElementById('search-end');
+            if (st) st.value = '';
+            if (sip) sip.value = '';
+            if (ds) ds.value = '';
+            if (de) de.value = '';
+            const resultsDiv = document.getElementById('search-results');
+            if (resultsDiv) {
+                resultsDiv.innerHTML = '<div class="empty-state"><i class="fas fa-file-alt" style="font-size: 48px; color: var(--text-secondary);"></i><p>Enter search criteria and click Search logs</p></div>';
+            }
+            const rep = document.getElementById('ip-reputation-result');
+            if (rep) rep.innerHTML = '';
+        }
+
+        (function initLogSearchHotkeys() {
+            function onEnter(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    searchLogs();
+                }
+            }
+            ['search-text', 'search-ip', 'search-start', 'search-end'].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('keydown', onEnter);
+            });
+        })();
+
+        async function checkIPReputation(ip) {
+            const resultDiv = document.getElementById('ip-reputation-result');
+            resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking IP reputation...';
+            
+            try {
+                const response = await fetch(`/api/ip/reputation/${ip}`);
+                const data = await response.json();
+                
+                const reputationColors = {
+                    'malicious': '#e53e3e',
+                    'suspicious': '#dd6b20',
+                    'low_risk': '#d69e2e',
+                    'clean': '#38a169'
+                };
+                
+                resultDiv.innerHTML = `
+                    <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; border-left: 4px solid ${reputationColors[data.reputation] || '#718096'};">
+                        <strong>IP Reputation: ${data.ip}</strong>
+                        <span class="risk-badge ${data.reputation === 'malicious' ? 'high' : data.reputation === 'suspicious' ? 'medium' : 'low'}" style="margin-left: 12px;">
+                            ${data.reputation.toUpperCase()}
+                        </span>
+                        ${data.threat_type ? `<br><small>Type: ${data.threat_type}</small>` : ''}
+                        ${data.threat_count ? `<br><small>Threat Count: ${data.threat_count}</small>` : ''}
+                        ${data.recommendation ? `<br><small>Recommendation: ${data.recommendation}</small>` : ''}
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = '<i class="fas fa-exclamation-triangle" style="color: #e53e3e;"></i> Could not check IP reputation';
+            }
+        }
+
+        // Attack Pattern Detection Functions
+        async function loadAttackPatterns() {
+            try {
+                const response = await fetch('/api/attack-patterns');
+                const patterns = await response.json();
+                const patternsDiv = document.getElementById('attack-patterns-list');
+                
+                if (patterns.length === 0) {
+                    patternsDiv.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color: #38a169; font-size: 48px;"></i><p>No attack patterns detected</p></div>';
+                    return;
+                }
+                
+                patternsDiv.innerHTML = patterns.map(pattern => `
+                    <div class="threat-item ${pattern.pattern_type}">
+                        <div class="threat-header">
+                            <div class="threat-type">
+                                <i class="fas fa-wave-square" style="margin-right: 8px;"></i>
+                                ${pattern.pattern_type.replace(/_/g, ' ').toUpperCase()}
+                            </div>
+                            <span class="risk-badge ${pattern.confidence_score > 0.8 ? 'high' : pattern.confidence_score > 0.5 ? 'medium' : 'low'}">
+                                ${(pattern.confidence_score * 100).toFixed(0)}% Confidence
+                            </span>
+                        </div>
+                        <div class="threat-meta">
+                            <span><i class="fas fa-server"></i> ${pattern.source_ips.slice(0, 3).join(', ')}${pattern.source_ips.length > 3 ? ' +' + (pattern.source_ips.length - 3) + ' more' : ''}</span>
+                            <span><i class="fas fa-clock"></i> ${new Date(pattern.start_time).toLocaleString()}</span>
+                            <span><i class="fas fa-chart-line"></i> ${pattern.event_count} events</span>
+                        </div>
+                        <p class="threat-desc">${pattern.description}</p>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading attack patterns:', error);
+            }
+        }
+
+        async function detectAttackPatterns() {
+            const patternsDiv = document.getElementById('attack-patterns-list');
+            patternsDiv.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Analyzing attack patterns...</div>';
+            
+            try {
+                const response = await fetch('/api/attack-patterns/detect', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`Attack pattern detection complete! Found ${data.patterns_detected} patterns.`);
+                    loadAttackPatterns();
+                }
+            } catch (error) {
+                patternsDiv.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color: #e53e3e; font-size: 48px;"></i><p>Error detecting patterns</p></div>`;
+                console.error('Error detecting attack patterns:', error);
+            }
+        }
+
+        /** Apriori API returns support/confidence as 0–1; show as e.g. 5.92%, 97.39%. */
+        function aprioriAsPercent(x, decimals) {
+            const d = decimals != null ? decimals : 2;
+            const n = Number(x);
+            if (x == null || x === '' || Number.isNaN(n)) return '—';
+            return (n * 100).toFixed(d) + '%';
+        }
+
+        async function loadAprioriRules() {
+            const el = document.getElementById('apriori-soc-list');
+            if (!el) return;
+            el.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Running Apriori on threat history…</div>';
+            const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            try {
+                const r = await fetch('/api/apriori-association-rules?hours=720&min_confidence=0.28&bucket=auto', { cache: 'no-store' });
+                const d = await r.json();
+                if (d.error) {
+                    el.innerHTML = `<div class="empty-state" style="color:#e53e3e;"><p>${esc(d.error)}</p></div>`;
+                    return;
+                }
+                const bucketLbl = (d.bucket_used === 'day') ? 'UTC calendar days' : 'UTC hour buckets';
+                const bucketReq = d.bucket_requested ? ` &nbsp;|&nbsp; <strong>bucket:</strong> ${esc(d.bucket_requested)}` : '';
+                const fb = d.bucket_fallback_from_hour ? ' <span style="color:#38a169;">(auto: switched hour → day)</span>' : '';
+                const meta = `
+                    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;padding:10px 12px;background:var(--bg-main);border-radius:8px;line-height:1.5;">
+                        <strong>Algorithm:</strong> ${esc(d.algorithm || '')}
+                        ${d.mlxtend_available === false ? ' <span style="color:#dd6b20;">(install <code>mlxtend</code> for full Apriori)</span>' : ''}
+                        ${fb}
+                        &nbsp;|&nbsp; <strong>Transactions:</strong> ${d.num_transactions || 0} (${bucketLbl})
+                        &nbsp;|&nbsp; <strong>Multi-type buckets:</strong> ${d.transactions_with_2plus_items || 0}
+                        &nbsp;|&nbsp; <strong>min_support:</strong> ${d.min_support_used != null ? aprioriAsPercent(d.min_support_used) : '—'}
+                        ${bucketReq}
+                        ${d.note ? `<div style="margin-top:8px;color:var(--text-primary);">${esc(d.note)}</div>` : ''}
+                        ${d.reading_guide ? `<div style="margin-top:10px;padding:10px;border-left:3px solid #667eea;background:rgba(102,126,234,0.08);font-size:12px;line-height:1.55;color:var(--text-primary);"><strong>How to read this:</strong> ${esc(d.reading_guide)}</div>` : ''}
+                    </div>`;
+                const rules = d.association_rules || [];
+                if (rules.length === 0) {
+                    el.innerHTML = meta + '<div class="empty-state"><p>No association rules above the confidence threshold. Add more varied threats or lower min_confidence in the API.</p></div>';
+                    return;
+                }
+                const rows = rules.map((rule, i) => {
+                    const ant = (rule.antecedents || []).map(x => esc(x)).join(', ');
+                    const cons = (rule.consequents || []).map(x => esc(x)).join(', ');
+                    return `
+                    <div class="threat-item" style="margin-bottom:10px;">
+                        <div class="threat-header">
+                            <div class="threat-type" style="font-size:14px;">Rule ${i + 1}: {${ant}} → {${cons}}</div>
+                        </div>
+                        <div class="threat-meta" style="flex-wrap:wrap;gap:8px;">
+                            <span><i class="fas fa-percentage"></i> support <strong>${aprioriAsPercent(rule.support)}</strong></span>
+                            <span><i class="fas fa-bullseye"></i> confidence <strong>${aprioriAsPercent(rule.confidence)}</strong></span>
+                            ${rule.lift != null ? `<span><i class="fas fa-arrow-trend-up"></i> lift <strong>${rule.lift}</strong></span>` : ''}
+                        </div>
+                    </div>`;
+                }).join('');
+                const fi = d.frequent_itemsets || [];
+                const fiBlock = fi.length ? `
+                    <div style="margin-top:16px;">
+                        <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Top frequent itemsets</div>
+                        <div style="font-size:12px;line-height:1.6;color:var(--text-primary);">
+                            ${fi.slice(0, 15).map(it => `<div>• {${(it.items||[]).map(x => esc(x)).join(', ')}} — support <strong>${aprioriAsPercent(it.support)}</strong></div>`).join('')}
+                        </div>
+                    </div>` : '';
+                el.innerHTML = meta + rows + fiBlock;
+            } catch (e) {
+                el.innerHTML = `<div class="empty-state" style="color:#e53e3e;"><p>Failed to load Apriori results</p></div>`;
+                console.error(e);
+            }
+        }
+
+        async function loadAprioriCicids() {
+            const el = document.getElementById('apriori-cicids-list');
+            if (!el) return;
+            el.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading CICIDS + discretising features + Apriori…</div>';
+            const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            try {
+                const r = await fetch('/api/apriori/cicids?max_rows=12000&min_confidence=0.4', { cache: 'no-store' });
+                const d = await r.json();
+                if (d.error) {
+                    el.innerHTML = `<div class="empty-state" style="color:#e53e3e;"><p>${esc(d.error)}</p></div>`;
+                    return;
+                }
+                const src = d.used_synthetic ? 'synthetic demo data (place CSV under data/)' : 'file: ' + esc(d.csv_path_used || '');
+                const meta = `
+                    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;padding:10px 12px;background:var(--bg-main);border-radius:8px;line-height:1.55;">
+                        <strong>CICIDS Apriori</strong> &nbsp;|&nbsp; rows: ${d.num_transactions || 0} &nbsp;|&nbsp; items: ${d.num_distinct_items || 0}
+                        &nbsp;|&nbsp; min_support: ${d.min_support_used != null ? aprioriAsPercent(d.min_support_used) : '—'}
+                        <div style="margin-top:6px;font-size:11px;">Source: ${src}</div>
+                        ${d.note ? `<div style="margin-top:8px;color:var(--text-primary);">${esc(d.note)}</div>` : ''}
+                        ${d.reading_guide ? `<div style="margin-top:8px;padding:8px;border-left:3px solid #38a169;background:rgba(56,161,105,0.08);font-size:11px;color:var(--text-primary);">${esc(d.reading_guide)}</div>` : ''}
+                    </div>`;
+                const rules = d.association_rules || [];
+                if (rules.length === 0) {
+                    el.innerHTML = meta + '<div class="empty-state"><p>No rules — try lower min_confidence in API or add more rows.</p></div>';
+                    return;
+                }
+                const rows = rules.map((rule, i) => {
+                    const ant = (rule.antecedents || []).map(x => esc(x)).join(', ');
+                    const cons = (rule.consequents || []).map(x => esc(x)).join(', ');
+                    return `
+                    <div class="threat-item" style="margin-bottom:10px;">
+                        <div class="threat-header">
+                            <div class="threat-type" style="font-size:13px;">${i + 1}. {${ant}} → {${cons}}</div>
+                        </div>
+                        <div class="threat-meta" style="flex-wrap:wrap;gap:8px;">
+                            <span>support <strong>${aprioriAsPercent(rule.support)}</strong></span>
+                            <span>confidence <strong>${aprioriAsPercent(rule.confidence)}</strong></span>
+                            ${rule.lift != null ? `<span>lift <strong>${rule.lift}</strong></span>` : ''}
+                        </div>
+                    </div>`;
+                }).join('');
+                const fi = d.frequent_itemsets || [];
+                const fiBlock = fi.length ? `
+                    <div style="margin-top:12px;font-size:11px;color:var(--text-secondary);">
+                        <strong>Sample itemsets</strong>
+                        ${fi.slice(0, 12).map(it => `<div>• {${(it.items||[]).map(x => esc(x)).join(', ')}} — support <strong>${aprioriAsPercent(it.support)}</strong></div>`).join('')}
+                    </div>` : '';
+                el.innerHTML = meta + rows + fiBlock;
+            } catch (e) {
+                el.innerHTML = `<div class="empty-state" style="color:#e53e3e;"><p>CICIDS Apriori request failed</p></div>`;
+                console.error(e);
+            }
+        }
+
+        // Incident Management Functions
+        async function loadIncidents() {
+            try {
+                const response = await fetch('/api/incidents');
+                const incidents = await response.json();
+                const incidentsDiv = document.getElementById('incidents-list');
+                
+                if (incidents.length === 0) {
+                    incidentsDiv.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color: #38a169; font-size: 48px;"></i><p>No incidents found</p></div>';
+                    return;
+                }
+                
+                incidentsDiv.innerHTML = incidents.map(incident => `
+                    <div class="threat-item ${incident.severity}">
+                        <div class="threat-header">
+                            <div class="threat-type">
+                                <i class="fas fa-exclamation-triangle" style="margin-right: 8px;"></i>
+                                ${incident.incident_id} - ${incident.title}
+                            </div>
+                            <span class="risk-badge ${incident.severity}">${incident.severity.toUpperCase()}</span>
+                        </div>
+                        <div class="threat-meta">
+                            <span><i class="fas fa-clock"></i> ${new Date(incident.created_at).toLocaleString()}</span>
+                            <span><i class="fas fa-user"></i> ${incident.assigned_to || 'Unassigned'}</span>
+                            <span><i class="fas fa-tag"></i> ${incident.status}</span>
+                        </div>
+                        <p class="threat-desc">${incident.description || 'No description'}</p>
+                        <div class="threat-actions">
+                            <button class="btn btn-small btn-resolve" onclick="updateIncidentStatus(${incident.id}, 'investigating')">
+                                <i class="fas fa-search"></i> Investigate
+                            </button>
+                            <button class="btn btn-small" onclick="updateIncidentStatus(${incident.id}, 'resolved')">
+                                <i class="fas fa-check"></i> Resolve
+                            </button>
+                            <button class="btn btn-small btn-false" onclick="escalateIncident(${incident.id})">
+                                <i class="fas fa-arrow-up"></i> Escalate
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading incidents:', error);
+            }
+        }
+
+        async function updateIncidentStatus(incidentId, status) {
+            try {
+                await fetch(`/api/incidents/${incidentId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: status })
+                });
+                loadIncidents();
+            } catch (error) {
+                console.error('Error updating incident:', error);
+            }
+        }
+
+        async function escalateIncident(incidentId) {
+            try {
+                const response = await fetch(`/api/incidents/${incidentId}/escalate`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    loadIncidents();
+                }
+            } catch (error) {
+                console.error('Error escalating incident:', error);
+            }
+        }
+
+        function showCreateIncidentModal() {
+            const title = prompt('Enter incident title:');
+            if (!title) return;
+            const description = prompt('Enter incident description:');
+            const severity = prompt('Enter severity (low/medium/high/critical):', 'medium');
+            
+            fetch('/api/incidents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: title,
+                    description: description,
+                    severity: severity,
+                    priority: severity === 'critical' ? 1 : severity === 'high' ? 2 : severity === 'medium' ? 3 : 4
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Incident created: ' + data.incident.incident_id);
+                    loadIncidents();
+                }
+            })
+            .catch(error => console.error('Error creating incident:', error));
+        }
+
+        refreshCoreStats();
+        // Timeline is refreshed inside refreshCoreStats every 5s (quiet mode). Manual Refresh uses loadAttackTimeline().
+        setInterval(refreshCoreStats, 5000); // Auto-refresh every 5 seconds (real-time data)
+
+        // ── Advanced Feature JS ───────────────────────────────
+
+        let hourChart = null;
+
+        async function loadSystemHealth() {
+            try {
+                const r = await fetch('/api/system-health');
+                const d = await r.json();
+                const grid = document.getElementById('system-health-grid');
+                const metrics = [
+                    { icon: '🖥️', label: 'CPU Usage',     value: d.cpu_percent + '%',     pct: d.cpu_percent,    warn: 70, crit: 85 },
+                    { icon: '🧠', label: 'Memory',         value: d.memory_percent + '%',  pct: d.memory_percent, warn: 70, crit: 85 },
+                    { icon: '💾', label: 'Disk',           value: d.disk_percent + '%',    pct: d.disk_percent,   warn: 75, crit: 90 },
+                    { icon: '📤', label: 'Net Sent',       value: d.net_sent_mb + ' MB',   pct: 0,                warn: 999, crit: 999 },
+                    { icon: '📥', label: 'Net Recv',       value: d.net_recv_mb + ' MB',   pct: 0,                warn: 999, crit: 999 },
+                    { icon: '⏱️', label: 'Uptime',         value: d.uptime,                pct: 0,                warn: 999, crit: 999 },
+                    { icon: '✅', label: 'Status',         value: d.status.toUpperCase(), pct: 0,                warn: 999, crit: 999 },
+                ];
+                grid.innerHTML = metrics.map(m => {
+                    const cls = m.pct >= m.crit ? 'health-crit' : m.pct >= m.warn ? 'health-warn' : 'health-ok';
+                    const bar = m.pct > 0 ? `<div class="health-bar ${cls}"><div class="health-bar-fill" style="width:${Math.min(m.pct,100)}%"></div></div>` : '';
+                    return `<div class="health-card ${cls}">
+                        <div class="h-icon">${m.icon}</div>
+                        <div class="h-value">${m.value}</div>
+                        <div class="h-label">${m.label}</div>
+                        ${bar}
+                    </div>`;
+                }).join('');
+            } catch(e) {
+                document.getElementById('system-health-grid').innerHTML =
+                    '<div class="empty-state"><p>Could not load system health.</p></div>';
+            }
+        }
+
+        /* ══════════════════════════════════════════════════
+           ML MODEL PANEL — loadModelInfo()
+        ══════════════════════════════════════════════════ */
+        async function loadModelInfo() {
+            const body = document.getElementById('ml-model-body');
+            if (!body) return;
+            body.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;">Loading…</div>';
+            const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            try {
+                const r = await fetch('/api/model/info');
+                const rawText = await r.text();
+                let d;
+                try {
+                    d = JSON.parse(rawText);
+                } catch (parseErr) {
+                    body.innerHTML = `<div style="color:#f56565;padding:12px;line-height:1.5;">
+                        <strong>Invalid JSON from /api/model/info</strong>
+                        <p style="font-size:12px;margin-top:8px;word-break:break-all;">HTTP ${r.status} — ${esc((rawText || '').slice(0, 400))}</p></div>`;
+                    return;
+                }
+
+                if (!r.ok) {
+                    body.innerHTML = `<div style="color:#f56565;padding:12px;">
+                        <strong>HTTP ${r.status}</strong>
+                        <p style="font-size:13px;margin-top:8px;">${esc(d.error || d.message || 'Request failed')}</p></div>`;
+                    return;
+                }
+
+                if (d.available !== true) {
+                    const msg = d.message || d.error || 'Model not loaded.';
+                    const hint = d.hint || 'Run model_trainer.py to create models/trained_model.pkl.';
+                    const steps = Array.isArray(d.steps) && d.steps.length
+                        ? `<ol style="margin:12px 0 0 18px;padding:0;color:var(--text-primary);font-size:13px;line-height:1.55;">
+                            ${d.steps.map((t) => `<li style="margin-bottom:8px;">${esc(t)}</li>`).join('')}
+                           </ol>`
+                        : '';
+                    const det = d.detail ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:8px;word-break:break-all;">${esc(d.detail)}</div>` : '';
+                    let fileBox = '';
+                    if (d.file_exists === false) {
+                        fileBox = `<p style="margin-top:12px;font-size:13px;color:var(--text-primary);">
+                            <i class="fas fa-file-circle-xmark"></i> File missing: <code style="font-size:12px;">${esc(d.model_path_relative || 'models/trained_model.pkl')}</code></p>`;
+                    } else if (d.file_exists === true) {
+                        fileBox = `<p style="margin-top:12px;font-size:13px;color:var(--text-primary);">
+                            <i class="fas fa-file"></i> File on disk: <code style="font-size:12px;">${esc(d.model_path_relative || '')}</code>
+                            (${esc(String(d.file_size_kb || '?'))} KB, modified ${esc(d.file_modified_utc || '?')}) — but Python could not load it (see detail).</p>`;
+                    }
+                    body.innerHTML = `<div style="color:#f56565;padding:12px;line-height:1.5;border:1px solid rgba(245,101,101,0.35);border-radius:10px;background:rgba(245,101,101,0.06);">
+                        <i class="fas fa-exclamation-triangle"></i> <strong>${esc(msg)}</strong>
+                        ${d.reason ? `<span style="font-size:11px;opacity:0.85;margin-left:8px;">(${esc(d.reason)})</span>` : ''}
+                        <p style="margin-top:10px;color:var(--text-primary);font-size:13px;">${esc(hint)}</p>
+                        ${fileBox}
+                        ${steps}
+                        ${det}
+                        </div>`;
+                    return;
+                }
+
+                const m  = d.metrics || {};
+                const cm = d.confusion_matrix || {};
+                const at = d.attack_types || {};
+                const fi = d.feature_importance || [];
+
+                // Attack type distribution
+                const atTotal = Object.values(at).reduce((a,b)=>a+b,0);
+                const atBadges = Object.entries(at).map(([k,v]) => {
+                    const pct = atTotal ? ((v/atTotal)*100).toFixed(1) : 0;
+                    const col = k==='Normal'
+                        ? 'rgba(72,187,120,0.15);color:#48bb78'
+                        : 'rgba(245,101,101,0.15);color:#f56565';
+                    return `<span style="background:${col};border-radius:20px;
+                        padding:3px 10px;font-size:11px;font-weight:600;margin:2px;">
+                        ${k}: ${v.toLocaleString()} (${pct}%)</span>`;
+                }).join(' ');
+
+                // Confusion matrix cells
+                const tp = cm.tp||0, fp = cm.fp||0, tn = cm.tn||0, fn = cm.fn||0;
+
+                // Feature importance bars
+                const maxImp = fi.length ? fi[0].importance : 1;
+                const fiBars = fi.map(f => `
+                    <div class="feat-row">
+                        <span class="feat-name" title="${f.name}">${f.name}</span>
+                        <div class="feat-bar-wrap">
+                            <div class="feat-bar" style="width:${(f.importance/maxImp*100).toFixed(1)}%"></div>
+                        </div>
+                        <span class="feat-pct">${f.importance.toFixed(1)}%</span>
+                    </div>`).join('');
+
+                const warnBox = (Array.isArray(d.warnings) && d.warnings.length)
+                    ? `<div style="background:rgba(237,137,54,0.12);border-left:4px solid #ed8936;padding:12px 14px;border-radius:8px;margin-bottom:16px;color:var(--text-primary);font-size:13px;line-height:1.55;">
+                        <strong><i class="fas fa-exclamation-triangle" style="color:#dd6b20;"></i> Training / data notice</strong>
+                        <ul style="margin:8px 0 0 18px;">${d.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>
+                       </div>` : '';
+                const metaLine = (d.file_modified_utc || d.runtime_numpy)
+                    ? `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;padding:8px 10px;background:var(--bg-main);border-radius:8px;">
+                        <i class="fas fa-info-circle"></i>
+                        ${d.model_path_relative ? ` <code style="font-size:11px;">${esc(d.model_path_relative)}</code> ·` : ''}
+                        ${d.file_modified_utc ? ` ${esc(d.file_modified_utc)} ·` : ''}
+                        ${d.file_size_kb != null ? ` ${esc(String(d.file_size_kb))} KB ·` : ''}
+                        ${d.runtime_numpy ? ` NumPy ${esc(d.runtime_numpy)} ·` : ''}
+                        ${d.runtime_sklearn ? ` sklearn ${esc(d.runtime_sklearn)}` : ''}
+                       </div>`
+                    : '';
+
+                body.innerHTML = warnBox + metaLine + `
+                <!-- Dataset badge + info -->
+                <div style="margin-bottom:16px;">
+                    <span class="ml-dataset-badge">
+                        <i class="fas fa-database"></i> ${d.dataset}
+                    </span>
+                    <span class="ml-dataset-badge" style="margin-left:8px;">
+                        <i class="fas fa-cogs"></i> ${d.model_type}
+                    </span>
+                    <span class="ml-dataset-badge" style="margin-left:8px;">
+                        <i class="fas fa-list"></i> ${d.n_features} Features
+                    </span>
+                    <span class="ml-dataset-badge" style="margin-left:8px;">
+                        <i class="fas fa-table"></i> ${(d.n_train||0).toLocaleString()} Training Records
+                    </span>
+                </div>
+
+                <!-- Attack type distribution -->
+                <div style="margin-bottom:16px;">
+                    <div style="font-size:12px;font-weight:600;color:var(--text-secondary);
+                        margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">
+                        <i class="fas fa-tags"></i> Dataset Class Distribution
+                    </div>
+                    <div>${atBadges}</div>
+                </div>
+
+                <!-- Metric cards -->
+                <div class="ml-info-grid">
+                    <div class="ml-metric-card">
+                        <div class="ml-metric-value">${m.accuracy||0}%</div>
+                        <div class="ml-metric-label">Accuracy</div>
+                    </div>
+                    <div class="ml-metric-card">
+                        <div class="ml-metric-value">${m.precision||0}%</div>
+                        <div class="ml-metric-label">Precision</div>
+                    </div>
+                    <div class="ml-metric-card">
+                        <div class="ml-metric-value" style="background:linear-gradient(135deg,#48bb78,#38a169);-webkit-background-clip:text;">${m.recall||0}%</div>
+                        <div class="ml-metric-label">Recall ← key</div>
+                    </div>
+                    <div class="ml-metric-card">
+                        <div class="ml-metric-value">${m.f1_score||0}%</div>
+                        <div class="ml-metric-label">F1-Score</div>
+                    </div>
+                    <div class="ml-metric-card">
+                        <div class="ml-metric-value" style="background:linear-gradient(135deg,#48bb78,#38a169);-webkit-background-clip:text;">${tp.toLocaleString()}</div>
+                        <div class="ml-metric-label">Attacks Caught</div>
+                    </div>
+                    <div class="ml-metric-card">
+                        <div class="ml-metric-value" style="background:linear-gradient(135deg,#f56565,#e53e3e);-webkit-background-clip:text;">${fn.toLocaleString()}</div>
+                        <div class="ml-metric-label">Attacks Missed</div>
+                    </div>
+                </div>
+
+                <!-- Confusion matrix + Feature importance -->
+                <div class="ml-two-col">
+                    <!-- Confusion Matrix -->
+                    <div class="ml-chart-box">
+                        <div class="ml-chart-title">
+                            <i class="fas fa-th" style="color:#667eea"></i> Confusion Matrix
+                            <span style="font-size:11px;color:var(--text-secondary);font-weight:400;">
+                                Test set: ${(tp+fp+tn+fn).toLocaleString()} records
+                            </span>
+                        </div>
+                        <div class="cm-grid">
+                            <div></div>
+                            <div class="cm-label">Predicted<br>Normal</div>
+                            <div class="cm-label">Predicted<br>Attack</div>
+                            <div class="cm-label" style="text-align:right;padding-right:6px;">Actual<br>Normal</div>
+                            <div class="cm-cell cm-tn">${tn.toLocaleString()}<br><span style="font-size:10px;font-weight:400;">True Neg</span></div>
+                            <div class="cm-cell cm-fp">${fp.toLocaleString()}<br><span style="font-size:10px;font-weight:400;">False Pos</span></div>
+                            <div class="cm-label" style="text-align:right;padding-right:6px;">Actual<br>Attack</div>
+                            <div class="cm-cell cm-fn">${fn.toLocaleString()}<br><span style="font-size:10px;font-weight:400;">False Neg</span></div>
+                            <div class="cm-cell cm-tp">${tp.toLocaleString()}<br><span style="font-size:10px;font-weight:400;">True Pos</span></div>
+                        </div>
+                        <div style="margin-top:12px;font-size:11px;color:var(--text-secondary);line-height:1.6;">
+                            <span style="color:#48bb78;font-weight:700;">True Pos</span> = attacks correctly caught &nbsp;|&nbsp;
+                            <span style="color:#f56565;font-weight:700;">False Neg</span> = missed attacks<br>
+                            <span style="color:#ed8936;font-weight:700;">False Pos</span> = false alarms &nbsp;|&nbsp;
+                            <span style="color:#667eea;font-weight:700;">True Neg</span> = correctly normal
+                        </div>
+                    </div>
+
+                    <!-- Feature Importance -->
+                    <div class="ml-chart-box">
+                        <div class="ml-chart-title">
+                            <i class="fas fa-sort-amount-down" style="color:#764ba2"></i>
+                            Top Feature Importances (Random Forest)
+                        </div>
+                        ${fiBars || '<div style="color:var(--text-secondary);font-size:12px;">No feature data available.</div>'}
+                        <div style="margin-top:10px;font-size:11px;color:var(--text-secondary);">
+                            Higher % = stronger signal for attack detection
+                        </div>
+                    </div>
+                </div>`;
+
+            } catch(e) {
+                body.innerHTML = `<div style="color:#f56565;padding:12px;">
+                    Error loading model info: ${e.message}</div>`;
+            }
+        }
+
+        async function loadMitreHeatmap() {
+            try {
+                const r = await fetch('/api/mitre-heatmap');
+                const d = await r.json();
+                document.getElementById('mitre-summary').innerHTML =
+                    `<strong>${d.total_techniques_hit}</strong> of <strong>${d.total_techniques}</strong> MITRE ATT&CK techniques detected across all threats.`;
+                const grid = document.getElementById('mitre-heatmap-grid');
+                const sorted = [...d.techniques].sort((a,b) => b.count - a.count);
+                grid.innerHTML = sorted.map(t => `
+                    <div class="mitre-card severity-${t.severity}">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <div>
+                                <div class="mitre-id">${t.technique_id}</div>
+                                <div class="mitre-name">${t.technique}</div>
+                                <div class="mitre-tactic">${t.tactic}</div>
+                            </div>
+                            <div class="mitre-count ${t.count===0?'zero':''}">${t.count}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) {
+                document.getElementById('mitre-heatmap-grid').innerHTML =
+                    '<div class="empty-state"><p>Could not load MITRE data.</p></div>';
+            }
+        }
+
+        async function loadAttackHeatmap() {
+            try {
+                const r = await fetch('/api/attack-heatmap');
+                const d = await r.json();
+                document.getElementById('peak-hour-label').innerHTML =
+                    `Peak attack hour: <strong>${d.peak_hour}:00</strong> &nbsp;|&nbsp; Peak day: <strong>${d.peak_day}</strong>`;
+                const ctx = document.getElementById('hourHeatmapChart').getContext('2d');
+                if (hourChart) hourChart.destroy();
+                const maxVal = Math.max(...d.hours, 1);
+                const colors = d.hours.map(v => {
+                    const intensity = v / maxVal;
+                    if (intensity > 0.75) return 'rgba(229,62,62,0.85)';
+                    if (intensity > 0.45) return 'rgba(237,137,54,0.75)';
+                    if (intensity > 0.15) return 'rgba(102,126,234,0.65)';
+                    return 'rgba(160,174,192,0.4)';
+                });
+                hourChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: Array.from({length:24}, (_,i) => i+'h'),
+                        datasets: [{
+                            label: 'Threats',
+                            data: d.hours,
+                            backgroundColor: colors,
+                            borderRadius: 4,
+                            borderSkipped: false
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { color: '#718096' }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            x: { ticks: { color: '#718096', font: { size: 10 } }, grid: { display: false } }
+                        }
+                    }
+                });
+            } catch(e) { console.error('Hour heatmap error:', e); }
+        }
+
+        async function loadBlocklist() {
+            try {
+                const r  = await fetch('/api/blocklist');
+                const d  = await r.json();
+                const el = document.getElementById('blocklist-container');
+                if (!d.blocked_ips || d.blocked_ips.length === 0) {
+                    el.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color:#48bb78;font-size:40px;"></i><p>No blocked IPs. Critical threats (≥9.0) are auto-blocked.</p></div>';
+                    return;
+                }
+                el.innerHTML = d.blocked_ips.map(b => `
+                    <div class="block-item">
+                        <div>
+                            <div class="block-ip"><i class="fas fa-ban"></i> ${b.ip}</div>
+                            <div class="block-reason">${b.reason || 'Blocked'} &nbsp;·&nbsp; ${new Date(b.blocked_at).toLocaleString()}</div>
+                        </div>
+                        <button class="unblock-btn" onclick="unblockIP('${b.ip}')">
+                            <i class="fas fa-unlock"></i> Unblock
+                        </button>
+                    </div>
+                `).join('');
+            } catch(e) { console.error('Blocklist error:', e); }
+        }
+
+        async function manualBlockIP() {
+            const ip = document.getElementById('block-ip-input').value.trim();
+            if (!ip) { alert('Enter an IP address first.'); return; }
+            try {
+                await fetch('/api/blocklist/add', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ip, reason: 'Manually blocked by analyst'})
+                });
+                document.getElementById('block-ip-input').value = '';
+                loadBlocklist();
+            } catch(e) { alert('Error blocking IP: ' + e.message); }
+        }
+
+        async function unblockIP(ip) {
+            if (!confirm('Unblock ' + ip + '?')) return;
+            try {
+                await fetch('/api/blocklist/remove/' + encodeURIComponent(ip), {method:'DELETE'});
+                loadBlocklist();
+            } catch(e) { alert('Error: ' + e.message); }
+        }
+
+        async function loadHoneypotHits() {
+            try {
+                const r = await fetch('/api/honeypot-hits');
+                const d = await r.json();
+                document.getElementById('honeypot-badge').textContent = d.total + ' HITS';
+                const el = document.getElementById('honeypot-list');
+                if (!d.hits || d.hits.length === 0) {
+                    el.innerHTML = '<div class="empty-state"><i class="fas fa-spider" style="font-size:48px;color:var(--text-secondary);"></i><p>No honeypot hits yet. Try visiting <code>/admin</code> or <code>/wp-login.php</code></p></div>';
+                    return;
+                }
+                el.innerHTML = d.hits.map(h => {
+                    const parts = (h.description || '').split('|');
+                    const path = parts[0] ? parts[0].replace('Honeypot triggered:', '').trim() : 'Unknown path';
+                    const ua   = parts[1] ? parts[1].replace('UA:', '').trim() : '';
+                    return `<div class="honeypot-item">
+                        <span class="hp-time">${new Date(h.timestamp).toLocaleString()}</span>
+                        <div class="hp-path"><i class="fas fa-spider"></i> ${path}</div>
+                        <div class="hp-ip">From: <strong>${h.source_ip}</strong> &nbsp;·&nbsp; Score: <strong>${h.risk_score}</strong> &nbsp;·&nbsp; ${ua.substring(0,60)}</div>
+                    </div>`;
+                }).join('');
+            } catch(e) { console.error('Honeypot error:', e); }
+        }
+
+        // ── Explainable AI ────────────────────────────────────
+
+        async function openXAI(threatId) {
+            document.getElementById('xai-overlay').classList.add('open');
+            document.getElementById('xai-subtitle').textContent = 'Threat #' + threatId;
+            document.getElementById('xai-body').innerHTML =
+                '<div style="text-align:center;padding:40px;"><i class="fas fa-spinner fa-spin" style="font-size:32px;color:#667eea;"></i><p style="margin-top:12px;color:var(--text-secondary);">Analysing threat…</p></div>';
+
+            try {
+                const r = await fetch('/api/xai/explain/' + threatId);
+                const d = await r.json();
+                if (d.error) throw new Error(d.error);
+                renderXAI(d);
+            } catch(e) {
+                document.getElementById('xai-body').innerHTML =
+                    '<div class="empty-state"><p>Could not load explanation: ' + e.message + '</p></div>';
+            }
+        }
+
+        function closeXAI() {
+            document.getElementById('xai-overlay').classList.remove('open');
+        }
+
+        function renderXAI(d) {
+            const scoreClass = d.risk_level === 'CRITICAL' ? 'critical' :
+                               d.risk_level === 'HIGH'     ? 'high'     :
+                               d.risk_level === 'MEDIUM'   ? 'medium'   : 'low';
+
+            const loc = d.context.location;
+            const locStr = loc ? (loc.city || '') + (loc.country ? ', ' + loc.country : '') : 'Unknown';
+
+            const sb = d.score_breakdown;
+            const maxScore = 10;
+            const factors = [
+                { label: 'Base Threat Severity', val: sb.base_threat_severity },
+                { label: 'Historical IP Risk',   val: sb.historical_ip_risk   },
+                { label: 'Geographic Risk',       val: sb.geographic_risk      },
+                { label: 'Time Pattern Risk',     val: sb.time_pattern_risk    },
+                { label: 'Attack Frequency',      val: sb.frequency_risk       },
+            ];
+
+            document.getElementById('xai-subtitle').textContent =
+                d.threat_type.replace(/_/g,' ').toUpperCase() + ' · IP ' + d.source_ip + ' · Score ' + d.risk_score + '/10';
+
+            document.getElementById('xai-body').innerHTML = `
+
+                <!-- Total score -->
+                <div class="xai-total-score">
+                    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;">OVERALL RISK SCORE</div>
+                    <div class="xai-total-num ${scoreClass}">${d.risk_score}<span style="font-size:18px;font-weight:400;">/10</span></div>
+                    <div style="margin-top:4px;"><span class="risk-badge ${scoreClass === 'critical' ? 'high' : scoreClass}">${d.risk_level}</span></div>
+                </div>
+
+                <!-- Why flagged -->
+                <div class="xai-section">
+                    <div class="xai-section-title"><i class="fas fa-search"></i> Detection Rule Triggered</div>
+                    <div class="xai-why-box">${d.why_flagged}</div>
+                </div>
+
+                <!-- MITRE ATT&CK -->
+                <div class="xai-section">
+                    <div class="xai-section-title"><i class="fas fa-fire"></i> MITRE ATT&CK Technique</div>
+                    <div class="xai-mitre-tag">
+                        <span class="xai-mitre-id">${d.mitre.split('—')[0].trim()}</span>
+                        <span>${d.mitre.split('—').slice(1).join('—').trim()}</span>
+                    </div>
+                </div>
+
+                <!-- Indicators -->
+                <div class="xai-section">
+                    <div class="xai-section-title"><i class="fas fa-exclamation-triangle"></i> Attack Indicators Detected</div>
+                    <div class="xai-indicators">
+                        ${d.indicators.map(i => `<div class="xai-indicator">${i}</div>`).join('')}
+                    </div>
+                </div>
+
+                <!-- Score breakdown -->
+                <div class="xai-section">
+                    <div class="xai-section-title"><i class="fas fa-chart-bar"></i> Risk Score Breakdown</div>
+                    <div class="xai-score-bars">
+                        ${factors.map(f => `
+                            <div class="xai-score-row">
+                                <div class="xai-score-label">
+                                    <span>${f.label}</span>
+                                    <strong>${f.val}/10</strong>
+                                </div>
+                                <div class="xai-score-track">
+                                    <div class="xai-score-fill" style="width:${(f.val/maxScore)*100}%"></div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Context -->
+                <div class="xai-section">
+                    <div class="xai-section-title"><i class="fas fa-globe"></i> Contextual Intelligence</div>
+                    <div class="xai-context-grid">
+                        <div class="xai-ctx-item">
+                            <div class="xai-ctx-label">Source IP</div>
+                            <div class="xai-ctx-value" style="font-family:monospace;">${d.source_ip}</div>
+                        </div>
+                        <div class="xai-ctx-item">
+                            <div class="xai-ctx-label">Location</div>
+                            <div class="xai-ctx-value">${locStr}</div>
+                        </div>
+                        <div class="xai-ctx-item">
+                            <div class="xai-ctx-label">Total Incidents from IP</div>
+                            <div class="xai-ctx-value" style="color:${d.context.ip_total_incidents > 3 ? '#e53e3e' : 'inherit'}">
+                                ${d.context.ip_total_incidents} ${d.context.ip_is_repeat ? '⚠ Repeat offender' : ''}
+                            </div>
+                        </div>
+                        <div class="xai-ctx-item">
+                            <div class="xai-ctx-label">Detected At</div>
+                            <div class="xai-ctx-value">${new Date(d.timestamp).toLocaleString()}</div>
+                        </div>
+                    </div>
+                    ${d.context.ai_explanation ? `
+                        <div style="margin-top:10px;padding:12px;background:rgba(49,130,206,0.08);border:1px solid rgba(49,130,206,0.2);border-radius:10px;font-size:13px;color:var(--text-primary);">
+                            <strong style="color:#3182ce;"><i class="fas fa-robot"></i> AI Analysis:</strong><br>
+                            <span style="margin-top:6px;display:block;">${d.context.ai_explanation}</span>
+                        </div>` : ''}
+                </div>
+
+                <!-- Recommended actions -->
+                <div class="xai-section">
+                    <div class="xai-section-title"><i class="fas fa-shield-alt"></i> Recommended Response Actions</div>
+                    <div class="xai-actions">
+                        ${d.actions.map(a => `<div class="xai-action">${a}</div>`).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', e => { if(e.key==='Escape') closeXAI(); });
+
+        // ── End Explainable AI ────────────────────────────────
+
+        // Load all advanced features on startup
+        loadModelInfo();
+        loadSystemHealth();
+        loadMitreHeatmap();
+        loadAttackHeatmap();
+        loadBlocklist();
+        loadHoneypotHits();
+        loadAprioriRules();
+        /* CICIDS Apriori: click button — avoids slow load on every page open */
+
+        // Auto-refresh advanced features every 15 seconds
+        setInterval(() => {
+            loadSystemHealth();
+            loadBlocklist();
+            loadHoneypotHits();
+        }, 15000);
+        setInterval(() => {
+            loadMitreHeatmap();
+            loadAttackHeatmap();
+        }, 30000);
+    </script>
+
+    <!-- ── Explainable AI Modal ────────────────────────────── -->
+    <div id="xai-overlay" onclick="if(event.target===this)closeXAI()">
+        <div id="xai-modal">
+            <div class="xai-header">
+                <div>
+                    <div class="xai-title"><i class="fas fa-brain" style="margin-right:8px;color:#667eea;"></i>Explainable AI — Why was this flagged?</div>
+                    <div class="xai-subtitle" id="xai-subtitle">Loading threat explanation…</div>
+                </div>
+                <button class="xai-close" onclick="closeXAI()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="xai-body" id="xai-body">
+                <div style="text-align:center;padding:40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:32px;color:#667eea;"></i>
+                    <p style="margin-top:12px;color:var(--text-secondary);">Analysing threat…</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- ── End Explainable AI Modal ─────────────────────────── -->
+
+    <!-- ── AI Security Assistant Chatbot ───────────────────── -->
+    <button id="chat-bubble" onclick="toggleChat()" title="AI Security Assistant">
+        <i class="fas fa-robot"></i>
+        <span class="chat-badge"></span>
+    </button>
+
+    <div id="chat-panel">
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <span class="chat-online-dot"></span>
+                <div>
+                    <div style="font-size:15px;font-weight:700;">AI Security Assistant</div>
+                    <div style="font-size:11px;font-weight:400;opacity:0.85;">Live SOC data · Always online</div>
+                </div>
+            </div>
+            <button class="chat-close-btn" onclick="toggleChat()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div id="chat-messages"></div>
+
+        <div class="chat-suggestions">
+            <button class="chat-suggest-btn" onclick="sendSuggestion('How many threats?')">&#128272; Threats</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What type of attacks?')">&#128737; Attack types</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('Which IPs are attacking?')">&#127760; Top IPs</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What dataset is used?')">&#128202; Dataset</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('How does the ML model work?')">&#129504; ML Model</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What is the model accuracy?')">&#127919; Accuracy</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What are false positives?')">&#9888; False Positives</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('Which feature is most important?')">&#128269; Top Features</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What is XAI?')">&#129302; XAI</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What is MITRE ATT&CK?')">&#128505; MITRE</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What is brute force?')">&#128274; Brute Force</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What is risk score?')">&#128200; Risk Score</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('Why was the top threat flagged?')">&#10067; Why flagged?</button>
+            <button class="chat-suggest-btn" onclick="sendSuggestion('What is this system?')">&#128161; Overview</button>
+        </div>
+
+        <div class="chat-input-row">
+            <input id="chat-input" type="text" placeholder="Ask about threats, dataset, ML model, XAI…"
+                   onkeydown="if(event.key==='Enter') sendChat()" autocomplete="off"/>
+            <button id="chat-send" onclick="sendChat()" title="Send">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ── Chatbot state ───────────────────────────────────────
+        let chatOpen = false;
+        let chatInitialised = false;
+
+        function toggleChat() {
+            chatOpen = !chatOpen;
+            const panel = document.getElementById('chat-panel');
+            panel.classList.toggle('open', chatOpen);
+            if (chatOpen && !chatInitialised) {
+                chatInitialised = true;
+                addBotMessage(
+                    "👋 Hi! I'm your **AI Security Assistant**.\n\n" +
+                    "I have live access to your SOC data — ask me about threats, " +
+                    "attack types, risk scores, or any security topic.\n\n" +
+                    "Try one of the quick buttons below or type your own question!"
+                );
+            }
+            if (chatOpen) {
+                setTimeout(() => document.getElementById('chat-input').focus(), 100);
+            }
+        }
+
+        function addUserMessage(text) {
+            const msgs = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = 'chat-msg user';
+            div.textContent = text;
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        function addBotMessage(text) {
+            const msgs = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = 'chat-msg bot';
+            // Convert simple markdown: **bold**, *italic*, bullet • newlines
+            div.innerHTML = text
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/`(.+?)`/g, '<code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:4px;font-size:12px;">$1</code>')
+                .replace(/\n/g, '<br>');
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        function showTyping() {
+            const msgs = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = 'chat-typing';
+            div.id = 'chat-typing-indicator';
+            div.innerHTML = '<span></span><span></span><span></span>';
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        function removeTyping() {
+            const el = document.getElementById('chat-typing-indicator');
+            if (el) el.remove();
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            input.value = '';
+            addUserMessage(message);
+            showTyping();
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                const data = await response.json();
+                removeTyping();
+                addBotMessage(data.reply || 'Sorry, I could not get a response.');
+            } catch (err) {
+                removeTyping();
+                addBotMessage('⚠️ Connection error. Please check the server is running.');
+            }
+        }
+
+        function sendSuggestion(text) {
+            document.getElementById('chat-input').value = text;
+            sendChat();
+        }
+    </script>
+    <!-- ── End AI Chatbot ───────────────────────────────────── -->
+</body>
+</html>
