@@ -1,0 +1,36 @@
+# requirements_render.txt
+# Use this for Render deployment (lighter than full requirements.txt)
+# Render command: pip install -r requirements_render.txt
+
+flask>=3.0.0
+flask-sqlalchemy>=3.1.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+werkzeug>=3.0.0
+gunicorn>=21.0.0
+
+# Log monitoring
+watchdog>=3.0.0
+
+# PDF reports
+reportlab>=4.0.0
+
+# Machine learning
+numpy>=1.26.0,<3
+scikit-learn>=1.3.0
+pandas>=2.0.0
+
+# Association rule mining (Apriori)
+mlxtend>=0.22.0
+
+# AI explanation (optional - needs OPENAI_API_KEY env var)
+openai>=1.10.0
+
+# GeoIP (optional)
+geoip2>=4.7.0
+
+# Office export
+openpyxl>=3.1.0
+python-docx>=1.1.0
+python-pptx>=0.6.21
+Pillow>=10.0.0
