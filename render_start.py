@@ -25,9 +25,30 @@ import threading
 import time
 import random
 
-# ── 1. Point to the Final/ folder ────────────────────────────────────────────
+# ── 1. Find working_app.py — handles both repo structures ────────────────────
+# Structure A: working_app.py is at repo root (same folder as render_start.py)
+# Structure B: working_app.py is inside a Final/ subfolder
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_FINAL = os.path.join(_HERE, 'Final')
+
+if os.path.exists(os.path.join(_HERE, 'working_app.py')):
+    # Structure A — working_app.py is right here
+    _FINAL = _HERE
+elif os.path.exists(os.path.join(_HERE, 'Final', 'working_app.py')):
+    # Structure B — working_app.py is inside Final/
+    _FINAL = os.path.join(_HERE, 'Final')
+else:
+    # Last resort — search one level down
+    for name in os.listdir(_HERE):
+        candidate = os.path.join(_HERE, name, 'working_app.py')
+        if os.path.exists(candidate):
+            _FINAL = os.path.join(_HERE, name)
+            break
+    else:
+        raise FileNotFoundError(
+            f"Cannot find working_app.py. Files in {_HERE}: {os.listdir(_HERE)}"
+        )
+
+print(f"📁 working_app.py found at: {_FINAL}")
 if _FINAL not in sys.path:
     sys.path.insert(0, _FINAL)
 os.chdir(_FINAL)          # working_app.py builds paths relative to CWD
